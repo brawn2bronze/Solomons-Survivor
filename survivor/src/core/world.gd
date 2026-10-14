@@ -41,6 +41,8 @@ var sim_running := false
 var run_time := 0.0
 var no_gems := false      # in-game sandbox lock: enemies drop nothing
 var no_levels := false    # in-game sandbox lock: XP ignored, level picker never opens
+var no_treasures := false # sandbox lock: elites drop no treasure chests, field wiped on enable
+var dev_time_rate := 1.0  # sandbox slow-mo baseline for FX inspection
 var run_coins := 0         # coins collected this run (HUD + game over); the balance itself lives in Meta
 var market_unlocked_now := false   # this run's boss kill opened the Black Market
 var decals: Array = []
@@ -207,14 +209,25 @@ func _grant_foreseen_mod() -> String:
 	return String(pick.get("label", key))
 
 
-## Sandbox entry: apply pre-run spawn filter, start sim, attach F1 overlay.
-## Pre-run config is minimal (character + allowed_enemies + elite_only).
-## Godmode / director / spawn-rate / time / builds / gem+level locks
-## are all controlled live from DevOverlay.
+## Sandbox entry: apply pre-run start state atomically before the first tick,
+## then attach the F1 overlay (which mirrors the same keys live).
+## Order matters: clock first, then director (pause/mult/timers seeded from the
+## clock), then locks/godmode/time-rate, and only then sim_running = true.
+## Paused means zero director spawns; time-skip while paused only moves the
+## clock, and due events (e.g. bosses) fire once on unpause.
 func _apply_dev_config() -> void:
 	var cfg: Dictionary = Game.dev_config
 	Game.godmode = false
+	Game.dev_time_rate = 1.0
+	dev_time_rate = 1.0
+	run_time = maxf(0.0, float(cfg.get("start_time", 0.0)))
 	enemies.apply_dev_config(cfg)
+	set_no_gems(bool(cfg.get("no_gems", false)))
+	set_no_levels(bool(cfg.get("no_levels", false)))
+	set_no_treasures(bool(cfg.get("no_treasures", false)))
+	if bool(cfg.get("godmode", false)):
+		dev_set_godmode(true)
+	dev_set_time_rate(clampf(float(cfg.get("time_rate", 1.0)), 0.1, 1.0))
 	sim_running = true
 	if Game.DEV_MODE_ENABLED:
 		var overlay := DevOverlay.new()
@@ -271,6 +284,27 @@ func set_no_levels(on: bool) -> void:
 		_pending_levels = 0
 		if player != null:
 			player.xp = 0
+
+
+## Sandbox lock (DevMenu pre-run + DevOverlay live). Mirrors set_no_gems:
+## elites stop dropping chests and the live field is recycled, so boss tests
+## don't get interrupted by pickup drafts. Manual Grant/Draft chest still works.
+func set_no_treasures(on: bool) -> void:
+	no_treasures = on
+	if on and chests != null:
+		for c in chests.live:
+			chests._free.append(c)
+			c.sprite.visible = false
+		chests.live.clear()
+
+
+## Sandbox slow-mo baseline for small-FX inspection. Stored on Game as well so
+## hit-stop completion restores to this instead of 1.0 in dev runs.
+func dev_set_time_rate(v: float) -> void:
+	dev_time_rate = clampf(v, 0.1, 1.0)
+	Game.dev_time_rate = dev_time_rate
+	if not Game._time_locked:
+		Engine.time_scale = dev_time_rate
 
 
 func _exit_tree() -> void:

@@ -1,9 +1,9 @@
 class_name DevOverlay
 extends CanvasLayer
 ## In-run sandbox cheat panel. Only created when Game.dev_active.
-## Toggle with F1. Covers: godmode, spawn selected-sprite / stress counts,
-## time skip, director pause + spawn-rate, force level-up / max build, kill all,
-## progression locks (no gem drops, no level-ups) for sprite-isolation tests.
+## Toggle with F1. Mirrors the pre-run DevMenu start state live: godmode,
+## director pause + spawn-rate, time jumps + slow-mo rate, force level-up /
+## max build, kill all, progression locks (no gem/treasure drops, no level-ups).
 
 var world
 var _panel: PanelContainer
@@ -12,10 +12,13 @@ var _visible_dev := true
 var _enemy_pick: OptionButton
 var _mult_slider: HSlider
 var _mult_label: Label
+var _rate_slider: HSlider
+var _rate_label: Label
 var _god_check: CheckBox
 var _dir_check: CheckBox
 var _nogems_check: CheckBox
 var _nolevels_check: CheckBox
+var _notreas_check: CheckBox
 var _level_pick: OptionButton
 var _chest_pick: OptionButton
 var _level_cards: Array = []
@@ -55,10 +58,11 @@ func setup(world_ref) -> void:
 	v.add_child(UI.label("DEV SANDBOX  (F1 hides)", 18, UI.GOLD))
 	v.add_child(UI.label("GOD / DIRECTOR", 13, UI.PURPLE))
 	_god_check = _check(v, "Godmode (infinite HP)", Game.godmode, _on_god)
-	_dir_check = _check(v, "Pause director", false, _on_dir_pause)
+	_dir_check = _check(v, "Pause director (zero spawns)", world.enemies.director_paused, _on_dir_pause)
 	v.add_child(UI.label("PROGRESSION LOCKS", 13, UI.PURPLE))
-	_nogems_check = _check(v, "No gem drops", false, _on_nogems)
-	_nolevels_check = _check(v, "No level-ups (freeze XP)", false, _on_nolevels)
+	_nogems_check = _check(v, "No gem drops", world.no_gems, _on_nogems)
+	_nolevels_check = _check(v, "No level-ups (freeze XP)", world.no_levels, _on_nolevels)
+	_notreas_check = _check(v, "No treasure drops", world.no_treasures, _on_notreas)
 	v.add_child(UI.label("SPAWN", 13, UI.PURPLE))
 	v.add_child(UI.label("Spawn target sprite", 14, UI.DIM))
 	_enemy_pick = OptionButton.new()
@@ -104,14 +108,24 @@ func setup(world_ref) -> void:
 	deposit_b.pressed.connect(_on_deposit_custom)
 	coin_row.add_child(deposit_b)
 	v.add_child(UI.label("TIME / RATE", 13, UI.PURPLE))
-	v.add_child(_row_buttons(["+30s", "+60s", "Rate x0"], [_on_t30, _on_t60, _on_rate_zero]))
-	_mult_label = UI.label("Spawn rate x%.1f" % 1.0, 14, UI.DIM)
+	v.add_child(_row_buttons(["+30s", "+60s", "Spawn x0"], [_on_t30, _on_t60, _on_rate_zero]))
+	_rate_label = UI.label("Time rate x%.2f (slow-mo FX)" % world.dev_time_rate, 14, UI.DIM)
+	v.add_child(_rate_label)
+	_rate_slider = HSlider.new()
+	_rate_slider.min_value = 0.1
+	_rate_slider.max_value = 1.0
+	_rate_slider.step = 0.05
+	_rate_slider.value = clampf(world.dev_time_rate, 0.1, 1.0)
+	_rate_slider.custom_minimum_size = Vector2(280, 20)
+	_rate_slider.value_changed.connect(_on_rate)
+	v.add_child(_rate_slider)
+	_mult_label = UI.label("Spawn rate x%.1f" % world.enemies.spawn_mult, 14, UI.DIM)
 	v.add_child(_mult_label)
 	_mult_slider = HSlider.new()
 	_mult_slider.min_value = 0.0
 	_mult_slider.max_value = 10.0
 	_mult_slider.step = 0.5
-	_mult_slider.value = 1.0
+	_mult_slider.value = world.enemies.spawn_mult
 	_mult_slider.custom_minimum_size = Vector2(280, 20)
 	_mult_slider.value_changed.connect(_on_mult)
 	v.add_child(_mult_slider)
@@ -170,9 +184,13 @@ func _process(_delta: float) -> void:
 	var flags := ""
 	if world.no_gems:
 		flags += " NG"
+	if world.no_treasures:
+		flags += " NT"
 	if world.no_levels:
 		flags += " NL"
-	_perf.text = "%d FPS  enemies %d/%d  proj %d  gems %d  t %ds%s" % [Engine.get_frames_per_second(), world.enemies.alive_count(), EnemyManager.MAX_POOL, world.projectiles.live.size(), world.gems.live.size(), int(world.run_time), flags]
+	if world.enemies.director_paused:
+		flags += " PAUSED"
+	_perf.text = "%d FPS  enemies %d/%d  proj %d  gems %d  t %ds  rate x%.2f%s" % [Engine.get_frames_per_second(), world.enemies.alive_count(), EnemyManager.MAX_POOL, world.projectiles.live.size(), world.gems.live.size(), int(world.run_time), world.dev_time_rate, flags]
 
 
 ## Cap the scroll area to the viewport so the panel can never overflow
@@ -205,6 +223,17 @@ func _on_nolevels(on: bool) -> void:
 	world.set_no_levels(on)
 	if on:
 		world.announce("LEVELS FROZEN", false)
+
+
+func _on_notreas(on: bool) -> void:
+	world.set_no_treasures(on)
+	if on:
+		world.announce("TREASURES OFF", false)
+
+
+func _on_rate(v: float) -> void:
+	world.dev_set_time_rate(v)
+	_rate_label.text = "Time rate x%.2f (slow-mo FX)" % world.dev_time_rate
 
 
 func _on_spawn1() -> void:

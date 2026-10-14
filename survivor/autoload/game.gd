@@ -19,6 +19,7 @@ var _hit_stop_token := 0
 var dev_active := false
 var dev_config: Dictionary = {}
 var godmode := false
+var dev_time_rate := 1.0   # sandbox slow-mo baseline for FX inspection; hit-stop restores to this in dev runs
 
 # --- Game-feel settings (Options panel, persisted). 1.0 = full strength, 0.0 = off. ---
 const FX_SETTINGS_PATH := "user://fx_settings.cfg"
@@ -30,15 +31,21 @@ var _time_locked := false    ## death slow-mo owns Engine.time_scale; hit-stops 
 
 
 ## Default sandbox settings. DevMenu edits a copy of this.
-## Minimal pre-run: character + enemy whitelist + elites-only.
-## Everything else (godmode, director, spawn rate, time, builds,
-## gem/level locks) is in-game only via DevOverlay. Legacy keys are
-## still read defensively with .get() defaults where consumed.
+## Pre-run covers time/director/locks/survival/spawn so the run starts
+## in the desired state; DevOverlay mirrors the same keys live in-game.
 func default_dev_config() -> Dictionary:
 	return {
 		"character": selected_character,
 		"allowed_enemies": [],       # empty = normal director pool; else Array of enemy ids
 		"elite_only": false,         # if true, only spawn entries with is_elite
+		"start_time": 0.0,           # jump-in clock (s); time-triggered events fire from here
+		"director_paused": false,    # true = zero director spawns; manual spawns still work
+		"no_gems": false,            # block gem + coin drops, wipe field on enable
+		"no_levels": false,          # freeze XP, level picker never opens
+		"no_treasures": false,       # block elite treasure drops, wipe field on enable
+		"godmode": false,            # infinite HP
+		"spawn_mult": 1.0,           # director rate multiplier
+		"time_rate": 1.0,            # slow-mo baseline for FX inspection (0.1 - 1.0)
 	}
 
 
@@ -46,6 +53,8 @@ func clear_dev() -> void:
 	dev_active = false
 	dev_config = {}
 	godmode = false
+	dev_time_rate = 1.0
+	Engine.time_scale = 1.0
 
 
 func _ready() -> void:
@@ -92,7 +101,7 @@ func hit_stop(seconds: float, time_scale: float = 0.04) -> void:
 	Engine.time_scale = time_scale
 	await get_tree().create_timer(seconds, true, false, true).timeout
 	if token == _hit_stop_token:
-		Engine.time_scale = 1.0
+		Engine.time_scale = dev_time_rate if dev_active else 1.0
 
 
 ## Death slow-mo: takes ownership of the clock so a late hit-stop can't snap it back to 1.0.

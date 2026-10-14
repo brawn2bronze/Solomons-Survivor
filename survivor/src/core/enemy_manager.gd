@@ -103,12 +103,22 @@ var director_paused := false
 
 
 ## Apply sandbox spawn rules. Safe to call with empty dict (resets to normal).
+## Paused = zero director spawns (regular, elite timer, boss one-shots, bat
+## ring); manual spawn_around_id() still works for enemy isolation. Timers are
+## seeded from the jump-in clock so skipping to boss time yields the boss
+## without a stale bat catch-up burst on top.
 func apply_dev_config(cfg: Dictionary) -> void:
     allowed_ids = (cfg.get("allowed_enemies", []) as Array).duplicate()
     elite_only = bool(cfg.get("elite_only", false))
     spawn_mult = maxf(0.0, float(cfg.get("spawn_mult", 1.0)))
     director_paused = bool(cfg.get("director_paused", false))
+    _spawn_acc = 0.0
     _rebuild_spawn_lists()
+    var start_t := maxf(0.0, float(cfg.get("start_time", 0.0)))
+    _event_next = maxf(50.0, start_t + 60.0)
+    for id in _elite_next.keys():
+        _elite_next[id] = maxf(float(_elite_next[id]), start_t)
+    _boss_spawned.clear()
 
 
 func _rebuild_spawn_lists() -> void:
@@ -295,7 +305,8 @@ func _tick_director(delta: float) -> void:
                 Audio.sfx("elite_enemy_spawn", -2.0, 1.0, 0.0)
                 world.announce("%s approaches" % def.display_name.to_upper(), def.height == 1)
                 Game.shake(4.0)
-    # unique boss events (EnemyDef.boss_time): once per run, never on the elite timer
+    # unique boss events (EnemyDef.boss_time): once per run, never on the elite timer.
+    # PRE-BATTLE HOOK: future boss intro dialogue pauses the director here before the spawn.
     for def in _boss_defs:
         if _boss_spawned.has(def.id) or t < def.boss_time:
             continue
@@ -307,13 +318,14 @@ func _tick_director(delta: float) -> void:
             Game.shake(7.0)
         else:
             _boss_spawned.erase(def.id)   # pool was full: retry next frame
-    # bat swarm event
+    # bat swarm event (respects the sprite whitelist so isolation stays isolated)
     if t >= _event_next:
         _event_next = t + 60.0
         var bat = DB.enemies.get("bat")
         if bat != null and t >= bat.spawn_start:
-            _spawn_ring(bat, 26, t)
-            world.announce("SWARM!", true)
+            if allowed_ids.is_empty() or allowed_ids.has("bat"):
+                _spawn_ring(bat, 26, t)
+                world.announce("SWARM!", true)
 
 
 func _pick_def(t: float):

@@ -35,6 +35,8 @@ func setup(world_ref) -> void:
 
 
 func drop(pos: Vector2) -> void:
+    if world != null and world.no_treasures:
+        return
     if randf() > DROP_CHANCE:
         return
     if live.size() >= MAX or _free.is_empty():
