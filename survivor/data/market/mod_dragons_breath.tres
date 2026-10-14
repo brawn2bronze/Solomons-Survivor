@@ -1,0 +1,16 @@
+[gd_resource type="Resource" script_class="MarketItemDef" load_steps=2 format=3]
+
+[ext_resource type="Script" path="res://data/defs/market_item_def.gd" id="1_s"]
+
+[resource]
+script = ExtResource("1_s")
+id = "mod_dragons_breath"
+kind = 1
+weapon_id = "pickup_blunderbuss"
+display_name = "Brimstone Breath"
+description = "Brimstone shells: every pellet sets enemies ablaze for 8 damage a second, 3.5s."
+cost = 640
+sort_order = 102
+ops = {}
+flags = {"burn_dps": 8.0, "burn_time": 3.5}
+

@@ -1,0 +1,21 @@
+[gd_resource type="Resource" script_class="CharacterDef" load_steps=2 format=3]
+
+[ext_resource type="Script" path="res://data/defs/character_def.gd" id="1_s"]
+
+[resource]
+script = ExtResource("1_s")
+id = "spider"
+display_name = "Spider"
+title = "Weaver of Fear"
+roster_order = 6
+roster_status = 1
+unlock_hint = "Locked - unlocks in the full release."
+blurb = "Fast and vicious but fragile. Paralyzing bites and a single trap web."
+sprite = "res://art/characters/spider.png"
+frame_size = 64
+weapon_id = "fangs"
+passive_id = "webs"
+base_stats = {"max_hp": 65, "move_speed": 140, "damage": 1.45, "defense": 1.0, "regen": 0.0, "area": 1.0, "cooldown": 1.0, "pickup_radius": 55, "luck": 0.0}
+flags = {}
+color = Color(0.588, 0.235, 0.784, 1)
+playstyles = ["Assassin: paralysis chance, lock down elites", "Reach: long fangs, bite from the edge of danger", "Trapper: big sticky webs that hold a whole wave"]

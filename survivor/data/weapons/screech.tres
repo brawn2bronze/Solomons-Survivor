@@ -1,0 +1,16 @@
+[gd_resource type="Resource" script_class="WeaponDef" load_steps=2 format=3]
+
+[ext_resource type="Script" path="res://data/defs/weapon_def.gd" id="1_s"]
+
+[resource]
+script = ExtResource("1_s")
+id = "screech"
+display_name = "Screech"
+description = "Emits a piercing sound wave that travels a short distance."
+behavior = "wave"
+audio_event = "screech"
+base = {"damage": 11.0, "cooldown": 1.2, "distance": 260.0, "width": 46.0, "speed": 420.0, "consecutive": 1, "gap": 0.16}
+branches = [{"id": "a", "name": "Far Cry", "desc": "Increased distance.", "on_pick": {"distance": ["mul", 1.4]}, "per_level": {"distance": ["mul", 1.1]}, "flags": {}}, {"id": "b", "name": "Echo Screech", "desc": "Consecutive screeches.", "on_pick": {"consecutive": ["add", 1]}, "per_level": {"consecutive": ["add", 0.5]}, "flags": {}}]
+level_scaling = {"damage": ["mul", 1.1]}
+max_level = 8
+color = Color(1.000, 0.941, 0.784, 1)

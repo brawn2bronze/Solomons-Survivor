@@ -1,0 +1,15 @@
+[gd_resource type="Resource" script_class="UpgradeDef" load_steps=2 format=3]
+
+[ext_resource type="Script" path="res://data/defs/upgrade_def.gd" id="1_s"]
+
+[resource]
+script = ExtResource("1_s")
+id = "recovery"
+display_name = "Recovery"
+description = "+0.5 HP regen per second"
+stat = "regen"
+op = "add"
+value = 0.5
+max_level = 5
+color = Color(0.431, 0.863, 0.510, 1)
+icon = "res://art/upgrades/recovery.png"

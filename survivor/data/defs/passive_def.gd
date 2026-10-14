@@ -1,0 +1,2 @@
+class_name PassiveDef
+extends AbilityDef

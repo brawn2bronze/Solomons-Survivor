@@ -1,0 +1,20 @@
+[gd_resource type="Resource" script_class="CharacterDef" load_steps=2 format=3]
+
+[ext_resource type="Script" path="res://data/defs/character_def.gd" id="1_s"]
+
+[resource]
+script = ExtResource("1_s")
+id = "paladin"
+display_name = "Paladin"
+title = "Oath of Dawn"
+roster_order = 4
+roster_status = 0
+blurb = "Slow, sturdy, self-healing. Heavy sword swings and a radiant aura."
+sprite = "res://art/characters/paladin.png"
+frame_size = 64
+weapon_id = "greatsword"
+passive_id = "prayer"
+base_stats = {"max_hp": 120, "move_speed": 98, "damage": 1.0, "defense": 2.0, "regen": 1.0, "area": 1.0, "cooldown": 1.0, "pickup_radius": 55, "luck": 0.0}
+flags = {}
+color = Color(0.941, 0.784, 0.275, 1)
+playstyles = ["Crusader: wave-emitting sword hits at range", "Zealot: focused energy, faster heavier swings", "Saint: aura tank that heals while it burns"]

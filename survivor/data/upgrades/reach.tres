@@ -1,0 +1,15 @@
+[gd_resource type="Resource" script_class="UpgradeDef" load_steps=2 format=3]
+
+[ext_resource type="Script" path="res://data/defs/upgrade_def.gd" id="1_s"]
+
+[resource]
+script = ExtResource("1_s")
+id = "reach"
+display_name = "Reach"
+description = "+8% area"
+stat = "area"
+op = "mul"
+value = 1.08
+max_level = 5
+color = Color(0.784, 0.471, 0.941, 1)
+icon = "res://art/upgrades/reach.png"

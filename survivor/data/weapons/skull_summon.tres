@@ -1,0 +1,21 @@
+[gd_resource type="Resource" script_class="WeaponDef" load_steps=2 format=3]
+
+[ext_resource type="Script" path="res://data/defs/weapon_def.gd" id="1_s"]
+
+[resource]
+script = ExtResource("1_s")
+id = "skull_summon"
+display_name = "Skull Summon"
+description = "Summons an ethereal skull that passes through every enemy for low damage."
+behavior = "skull"
+audio_event = "skull_projectile"
+base = {"damage": 8.0, "cooldown": 1.6, "count": 1, "speed": 170.0, "life": 3.2, "size": 1.0, "range": 420.0}
+branches = [{"id": "a", "name": "Skull Chorus", "desc": "More projectiles and faster attacks.", "on_pick": {"count": ["add", 1], "cooldown": ["mul", 0.85]}, "per_level": {"count": ["add", 0.5], "cooldown": ["mul", 0.95]}, "flags": {}}, {"id": "b", "name": "Grand Skull", "desc": "A single skull that grows in size and damage.", "on_pick": {"size": ["mul", 1.4], "damage": ["mul", 1.4]}, "per_level": {"size": ["mul", 1.1], "damage": ["mul", 1.12]}, "flags": {}}]
+level_scaling = {"damage": ["mul", 1.1]}
+max_level = 8
+color = Color(0.431, 0.941, 0.863, 1)
+icon = "res://art/fx/skull_projectile.png"
+icon_frames = 2
+icon_fps = 8.0
+preview_kind = "static"
+anims = {}

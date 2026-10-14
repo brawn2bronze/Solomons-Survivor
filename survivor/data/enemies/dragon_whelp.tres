@@ -1,0 +1,29 @@
+[gd_resource type="Resource" script_class="EnemyDef" load_steps=2 format=3]
+
+[ext_resource type="Script" path="res://data/defs/enemy_def.gd" id="1_s"]
+
+[resource]
+script = ExtResource("1_s")
+id = "dragon_whelp"
+display_name = "Dragon Whelp"
+family = "dragon"
+max_hp = 320.0
+speed = 60.0
+contact_damage = 18.0
+xp = 60
+radius = 16.0
+sprite = "res://art/enemies/dragon_whelp.png"
+frames = 4
+behavior = "ranged"
+height = 1
+is_elite = true
+can_hit_flying = true
+hit_event = "dragon_hit"
+sprite_scale = 1.5
+spawn_weight = 0
+spawn_start = 240.0
+spawn_end = 9999.0
+elite_every = 110.0
+shoot_interval = 2.3
+shoot_speed = 170.0
+shoot_damage = 14.0

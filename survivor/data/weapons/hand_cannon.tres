@@ -1,0 +1,16 @@
+[gd_resource type="Resource" script_class="WeaponDef" load_steps=2 format=3]
+
+[ext_resource type="Script" path="res://data/defs/weapon_def.gd" id="1_s"]
+
+[resource]
+script = ExtResource("1_s")
+id = "hand_cannon"
+display_name = "Hand-Cannon"
+description = "Fires one large piercing bullet with a long reload."
+behavior = "cannon"
+audio_event = "hand_cannon"
+base = {"damage": 46.0, "reload_time": 3.0, "pierce": 99, "radius": 9.0, "speed": 470.0, "range": 560.0, "shrapnel": 0, "shrapnel_damage": 0.35, "count": 1}
+branches = [{"id": "a", "name": "Shrapnel", "desc": "Extra projectiles on hit.", "on_pick": {"shrapnel": ["add", 3]}, "per_level": {"shrapnel": ["add", 1]}, "flags": {}}, {"id": "b", "name": "Heavy Shot", "desc": "Projectile size increase.", "on_pick": {"radius": ["mul", 1.35], "damage": ["mul", 1.1]}, "per_level": {"radius": ["mul", 1.12]}, "flags": {}}]
+level_scaling = {"damage": ["mul", 1.11]}
+max_level = 8
+color = Color(1.000, 0.471, 0.235, 1)

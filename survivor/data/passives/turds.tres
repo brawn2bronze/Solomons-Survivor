@@ -1,0 +1,48 @@
+[gd_resource type="Resource" script_class="PassiveDef" format=3 uid="uid://b6dt0nyln3oks"]
+
+[ext_resource type="Script" uid="uid://bgij7k3vbnock" path="res://data/defs/passive_def.gd" id="1_s"]
+
+[resource]
+script = ExtResource("1_s")
+id = "turds"
+display_name = "Turds"
+description = "Leaves a turd once in a while; enemies who step on it slip (same stun as Flash Bombs)."
+behavior = "turds"
+audio_event = "goblin_hit"
+base = {
+"interval": 3.5,
+"lifetime": 15.0,
+"max_turds": 5,
+"poison_dps": 5.0,
+"poison_time": 4.0,
+"radius": 16.0,
+"stun": 1.0
+}
+branches = [{
+"desc": "Increase amount of turds on screen.",
+"flags": {},
+"id": "a",
+"name": "Volume Discount",
+"on_pick": {
+"interval": ["mul", 0.8],
+"max_turds": ["add", 2]
+},
+"per_level": {
+"max_turds": ["add", 1]
+}
+}, {
+"desc": "Cause poison and scaling damage.",
+"flags": {},
+"id": "b",
+"name": "Toxic Waste",
+"on_pick": {
+"poison_dps": ["set", 4.0]
+},
+"per_level": {
+"poison_dps": ["mul", 1.25]
+}
+}]
+level_scaling = {
+"stun": ["mul", 1.05]
+}
+color = Color(0.1682041, 0.33829832, 0.11255523, 1)

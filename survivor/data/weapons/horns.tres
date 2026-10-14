@@ -1,0 +1,16 @@
+[gd_resource type="Resource" script_class="WeaponDef" load_steps=2 format=3]
+
+[ext_resource type="Script" path="res://data/defs/weapon_def.gd" id="1_s"]
+
+[resource]
+script = ExtResource("1_s")
+id = "horns"
+display_name = "Horns"
+description = "Swipe horns left and right: high damage, limited radius."
+behavior = "melee_swipe"
+audio_event = "horn_swipe"
+base = {"damage": 30.0, "cooldown": 0.85, "radius": 64.0, "arc_deg": 115.0, "knockback": 110.0, "alternate": true, "charge": false, "charge_interval": 6.0, "charge_damage": 2.5}
+branches = [{"id": "a", "name": "Wild Gore", "desc": "Increased radius and attack speed.", "on_pick": {"radius": ["mul", 1.25], "cooldown": ["mul", 0.85]}, "per_level": {"radius": ["mul", 1.06], "cooldown": ["mul", 0.95]}, "flags": {}}, {"id": "b", "name": "Bull Rush", "desc": "Added charge attack: randomly charges at foes, impaling them on contact.", "on_pick": {}, "per_level": {"charge_damage": ["mul", 1.12]}, "flags": {"charge": true}}]
+level_scaling = {"damage": ["mul", 1.1]}
+max_level = 8
+color = Color(0.933, 0.886, 0.745, 1)

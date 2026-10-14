@@ -1,0 +1,15 @@
+[gd_resource type="Resource" script_class="UpgradeDef" load_steps=2 format=3]
+
+[ext_resource type="Script" path="res://data/defs/upgrade_def.gd" id="1_s"]
+
+[resource]
+script = ExtResource("1_s")
+id = "swiftness"
+display_name = "Swiftness"
+description = "+7% move speed"
+stat = "move_speed"
+op = "mul"
+value = 1.07
+max_level = 5
+color = Color(0.353, 0.784, 0.902, 1)
+icon = "res://art/upgrades/swiftness.png"

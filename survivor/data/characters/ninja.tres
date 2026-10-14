@@ -1,0 +1,20 @@
+[gd_resource type="Resource" script_class="CharacterDef" load_steps=2 format=3]
+
+[ext_resource type="Script" path="res://data/defs/character_def.gd" id="1_s"]
+
+[resource]
+script = ExtResource("1_s")
+id = "ninja"
+display_name = "Ninja"
+title = "Shadow Blade"
+roster_order = 2
+roster_status = 0
+blurb = "Fastest on foot after the goose. Slashes fast and stuns whole crowds."
+sprite = "res://art/characters/ninja.png"
+frame_size = 64
+weapon_id = "katana"
+passive_id = "flash_bombs"
+base_stats = {"max_hp": 85, "move_speed": 150, "damage": 1.0, "defense": 1.0, "regen": 0.0, "area": 1.0, "cooldown": 1.0, "pickup_radius": 55, "luck": 0.0}
+flags = {}
+color = Color(0.588, 0.275, 0.863, 1)
+playstyles = ["Whirlwind: max radius, cut everything around you", "Blitz: strike speed, single-target shredder", "Controller: bombs stun so everything else is free"]

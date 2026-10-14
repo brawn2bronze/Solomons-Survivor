@@ -1,0 +1,16 @@
+[gd_resource type="Resource" script_class="WeaponDef" load_steps=2 format=3]
+
+[ext_resource type="Script" path="res://data/defs/weapon_def.gd" id="1_s"]
+
+[resource]
+script = ExtResource("1_s")
+id = "pickup_energy_food"
+display_name = "Angelic Manna"
+description = "Forbidden weapon. A snack break: double damage and faster legs for a few seconds."
+behavior = "pickup_buff"
+audio_event = "level_up"
+base = {"damage": 0.0, "cooldown": 18.0, "duration": 6.0}
+branches = [{"id": "a", "name": "Feast", "desc": "The energy lasts longer.", "on_pick": {"duration": ["add", 2.0]}, "per_level": {"duration": ["add", 0.5]}, "flags": {}}, {"id": "b", "name": "Quick Snack", "desc": "Snack more often.", "on_pick": {"cooldown": ["mul", 0.8]}, "per_level": {"cooldown": ["mul", 0.95]}, "flags": {}}]
+level_scaling = {"duration": ["add", 0.5]}
+max_level = 5
+color = Color(0.400, 1.000, 0.400, 1)

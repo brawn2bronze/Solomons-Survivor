@@ -1,0 +1,20 @@
+[gd_resource type="Resource" script_class="CharacterDef" load_steps=2 format=3]
+
+[ext_resource type="Script" path="res://data/defs/character_def.gd" id="1_s"]
+
+[resource]
+script = ExtResource("1_s")
+id = "wizard"
+display_name = "Wizard"
+title = "Archmage"
+roster_order = 5
+roster_status = 0
+blurb = "Glass cannon. Chain lightning and an astral double that duplicates your spells."
+sprite = "res://art/characters/wizard.png"
+frame_size = 64
+weapon_id = "merlins_book"
+passive_id = "astral_projection"
+base_stats = {"max_hp": 90, "move_speed": 110, "damage": 1.3, "defense": 0.0, "regen": 0.0, "area": 1.0, "cooldown": 1.0, "pickup_radius": 55, "luck": 0.0}
+flags = {}
+color = Color(0.353, 0.471, 0.941, 1)
+playstyles = ["Stormcaller: more chains, more voltage", "Orb mage: lightning orbs that zone the arena", "Astral burst: long-cooldown, massive double-cast windows"]

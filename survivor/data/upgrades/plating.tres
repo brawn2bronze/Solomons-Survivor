@@ -1,0 +1,15 @@
+[gd_resource type="Resource" script_class="UpgradeDef" load_steps=2 format=3]
+
+[ext_resource type="Script" path="res://data/defs/upgrade_def.gd" id="1_s"]
+
+[resource]
+script = ExtResource("1_s")
+id = "plating"
+display_name = "Plating"
+description = "+1 armor"
+stat = "defense"
+op = "add"
+value = 1.0
+max_level = 5
+color = Color(0.667, 0.690, 0.745, 1)
+icon = "res://art/upgrades/plating.png"

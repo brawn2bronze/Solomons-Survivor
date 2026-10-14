@@ -1,0 +1,15 @@
+[gd_resource type="Resource" script_class="UpgradeDef" load_steps=2 format=3]
+
+[ext_resource type="Script" path="res://data/defs/upgrade_def.gd" id="1_s"]
+
+[resource]
+script = ExtResource("1_s")
+id = "haste"
+display_name = "Haste"
+description = "-7% cooldowns"
+stat = "cooldown"
+op = "mul"
+value = 0.93
+max_level = 5
+color = Color(0.941, 0.784, 0.314, 1)
+icon = "res://art/upgrades/haste.png"

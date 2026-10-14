@@ -1,0 +1,16 @@
+[gd_resource type="Resource" script_class="WeaponDef" load_steps=2 format=3]
+
+[ext_resource type="Script" path="res://data/defs/weapon_def.gd" id="1_s"]
+
+[resource]
+script = ExtResource("1_s")
+id = "six_shooter"
+display_name = "6-Shooter"
+description = "Fires 6 consecutive shots, then reloads."
+behavior = "revolver"
+audio_event = "revolver_shot"
+base = {"damage": 12.0, "shots": 6, "shot_interval": 0.11, "reload_time": 1.7, "pierce": 0, "range": 520.0, "speed": 640.0, "spread_deg": 3.0, "radius": 4.0, "count": 1}
+branches = [{"id": "a", "name": "Speed Loader", "desc": "Decrease reload time.", "on_pick": {"reload_time": ["mul", 0.8]}, "per_level": {"reload_time": ["mul", 0.9]}, "flags": {}}, {"id": "b", "name": "Armor-Piercing Rounds", "desc": "Increase piercing.", "on_pick": {"pierce": ["add", 1]}, "per_level": {"pierce": ["add", 1]}, "flags": {}}]
+level_scaling = {"damage": ["mul", 1.1]}
+max_level = 8
+color = Color(1.000, 0.839, 0.471, 1)

@@ -1,0 +1,29 @@
+[gd_resource type="Resource" script_class="EnemyDef" load_steps=2 format=3]
+
+[ext_resource type="Script" path="res://data/defs/enemy_def.gd" id="1_s"]
+
+[resource]
+script = ExtResource("1_s")
+id = "bat"
+display_name = "Cave Bat"
+family = "goblin"
+max_hp = 8.0
+speed = 85.0
+contact_damage = 5.0
+xp = 1
+radius = 8.0
+sprite = "res://art/enemies/bat.png"
+frames = 4
+behavior = "swarm"
+height = 1
+is_elite = false
+can_hit_flying = false
+hit_event = "goblin_hit"
+sprite_scale = 0.75
+spawn_weight = 6
+spawn_start = 45.0
+spawn_end = 9999.0
+elite_every = 0.0
+shoot_interval = 0.0
+shoot_speed = 0.0
+shoot_damage = 0.0

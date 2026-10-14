@@ -1,0 +1,16 @@
+[gd_resource type="Resource" script_class="PassiveDef" load_steps=2 format=3]
+
+[ext_resource type="Script" path="res://data/defs/passive_def.gd" id="1_s"]
+
+[resource]
+script = ExtResource("1_s")
+id = "aerial_strike"
+display_name = "Aerial Strike"
+description = "At regular intervals, swoop in on prey with a piercing talon attack."
+behavior = "swoop"
+audio_event = "screech"
+base = {"interval": 7.0, "damage": 48.0, "swoop_range": 320.0, "invuln": 0.4, "attack": true}
+branches = [{"id": "a", "name": "Assassin's Dive", "desc": "Specialize for assassin build (higher damage).", "on_pick": {"damage": ["mul", 1.6], "interval": ["mul", 0.9]}, "per_level": {"damage": ["mul", 1.15]}, "flags": {}}, {"id": "b", "name": "Evasive Maneuvers", "desc": "Limit passive to evasive maneuvers only (invulnerability, no attack).", "on_pick": {"interval": ["set", 5.0], "invuln": ["set", 0.9]}, "per_level": {"interval": ["mul", 0.93], "invuln": ["add", 0.08]}, "flags": {"evasive": true}}]
+level_scaling = {"damage": ["mul", 1.12]}
+max_level = 8
+color = Color(0.863, 0.784, 0.588, 1)

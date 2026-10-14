@@ -1,0 +1,21 @@
+[gd_resource type="Resource" script_class="WeaponDef" load_steps=2 format=3]
+
+[ext_resource type="Script" path="res://data/defs/weapon_def.gd" id="1_s"]
+
+[resource]
+script = ExtResource("1_s")
+id = "greatsword"
+display_name = "Greatsword"
+description = "Slower than the katana but hits much harder."
+behavior = "melee_swipe"
+audio_event = "greatsword_swing"
+base = {"damage": 34.0, "cooldown": 1.5, "radius": 98.0, "arc_deg": 160.0, "knockback": 140.0, "alternate": false, "wave": false, "wave_damage": 0.55}
+branches = [{"id": "a", "name": "Holy Wave", "desc": "Sword emits a projectile wave on top of the melee attack.", "on_pick": {}, "per_level": {"wave_damage": ["mul", 1.12]}, "flags": {"wave": true}}, {"id": "b", "name": "Focused Zeal", "desc": "Concentrate energy: higher damage and faster swings.", "on_pick": {"damage": ["mul", 1.25], "cooldown": ["mul", 0.85]}, "per_level": {"damage": ["mul", 1.1], "cooldown": ["mul", 0.95]}, "flags": {}}]
+level_scaling = {"damage": ["mul", 1.1]}
+max_level = 8
+color = Color(1.000, 0.922, 0.627, 1)
+icon = "res://art/weapons/greatsword.png"
+icon_frames = 1
+icon_fps = 8.0
+preview_kind = "static"
+anims = {}

@@ -1,0 +1,36 @@
+[gd_resource type="Resource" script_class="CharacterDef" format=3 uid="uid://ppobpgtiw10y"]
+
+[ext_resource type="Script" uid="uid://bnk2q7g2y08y" path="res://data/defs/character_def.gd" id="1_s"]
+
+[resource]
+script = ExtResource("1_s")
+id = "goose"
+display_name = "Goose"
+title = "Menace"
+roster_order = 10
+roster_status = 1
+unlock_hint = "Locked - unlocks in the full release."
+blurb = "Very fast and fragile, but gets stronger the lower its health. Terrifies enemies instead of hurting them."
+sprite = "res://art/characters/goose.png"
+weapon_id = "fear"
+passive_id = "turds"
+base_stats = {
+"area": 1.0,
+"cooldown": 1.0,
+"damage": 0.8,
+"defense": 0.0,
+"luck": 1.0,
+"max_hp": 70,
+"move_speed": 165,
+"pickup_radius": 55,
+"regen": 0.0
+}
+flags = {
+"low_hp_scaling": {
+"cooldown": -0.35,
+"damage": 0.9,
+"move_speed": 0.25
+}
+}
+color = Color(0.961, 0.961, 0.98, 1)
+playstyles = ["Honk tank: bigger fear, permanent crowd control", "Charge-and-peck: damage during charges", "Toxic swamp: poison turds cover the arena"]

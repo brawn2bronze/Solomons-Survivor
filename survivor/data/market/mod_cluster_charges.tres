@@ -1,0 +1,16 @@
+[gd_resource type="Resource" script_class="MarketItemDef" load_steps=2 format=3]
+
+[ext_resource type="Script" path="res://data/defs/market_item_def.gd" id="1_s"]
+
+[resource]
+script = ExtResource("1_s")
+id = "mod_cluster_charges"
+kind = 1
+weapon_id = "pickup_dynamite"
+display_name = "Cluster Charges"
+description = "Every blast spawns 3 smaller aftershocks around it, half damage each."
+cost = 600
+sort_order = 104
+ops = {}
+flags = {"cluster": 3}
+

@@ -1,0 +1,21 @@
+[gd_resource type="Resource" script_class="WeaponDef" load_steps=2 format=3]
+
+[ext_resource type="Script" path="res://data/defs/weapon_def.gd" id="1_s"]
+
+[resource]
+script = ExtResource("1_s")
+id = "hyphal_net"
+display_name = "Hyphal Net"
+description = "Fruiting nodes erupt beneath nearby foes and link into a slowing, cutting hyphal web."
+behavior = "mycelium_net"
+audio_event = "skull_projectile"
+base = {"cooldown": 1.6, "reach": 220.0, "node_life": 6.0, "max_nodes": 4, "node_radius": 46.0, "pop_dmg": 7.0, "threads_enabled": 1, "link_range": 200.0, "links_per_node": 2, "thread_dmg": 3.0, "thread_tick": 0.45, "thread_slow": 0.25, "thread_half_width": 10.0, "fused": 0, "ballistic": 0, "launch_range": 0.0, "launch_interval": 0.0, "spores_per_volley": 0, "spore_dmg": 0.0, "spore_speed": 0.0, "infect_dps": 0.0, "infect_time": 0.0, "burst_dmg": 0.0, "burst_radius": 0.0, "expire_burst_dmg": 0.0, "expire_burst_radius": 0.0}
+branches = [{"id": "a", "name": "Anastomosis", "desc": "Hyphae fuse into one dense mesh: more nodes, longer links, harder slow. Expiring nodes release airborne spores.", "on_pick": {"pop_dmg": ["add", -2.0], "cooldown": ["add", 0.2], "max_nodes": ["add", 2], "node_life": ["add", 3.0], "links_per_node": ["add", 4], "link_range": ["add", 60.0], "thread_slow": ["add", 0.15], "thread_half_width": ["add", 4.0], "expire_burst_dmg": ["set", 9.0], "expire_burst_radius": ["set", 70.0], "fused": ["set", 1]}, "per_level": {"thread_dmg": ["add", 0.4], "thread_tick": ["add", -0.02], "link_range": ["add", 8.0], "expire_burst_dmg": ["add", 2.5]}, "flags": {"fused": true}}, {"id": "b", "name": "Ballistospore", "desc": "Nodes stop linking and become spore launchers. Hits infect; infected foes burst into more spores when they die.", "on_pick": {"pop_dmg": ["add", -3.0], "cooldown": ["add", -0.3], "max_nodes": ["add", 1], "node_life": ["add", -1.5], "launch_range": ["set", 260.0], "launch_interval": ["set", 0.8], "spores_per_volley": ["set", 1.0], "spore_dmg": ["set", 5.0], "spore_speed": ["set", 900.0], "infect_dps": ["set", 2.0], "infect_time": ["set", 3.0], "burst_dmg": ["set", 8.0], "burst_radius": ["set", 55.0], "ballistic": ["set", 1], "threads_enabled": ["set", 0]}, "per_level": {"spore_dmg": ["add", 1.5], "launch_interval": ["add", -0.05], "infect_dps": ["add", 0.5], "burst_dmg": ["add", 2.5], "burst_radius": ["add", 4.0]}, "flags": {"ballistic": true, "threads_enabled": false}}]
+level_scaling = {"pop_dmg": ["add", 1.0], "thread_dmg": ["add", 0.3]}
+max_level = 8
+color = Color(0.78, 0.95, 0.55, 1)
+icon = ""
+icon_frames = 1
+icon_fps = 8.0
+preview_kind = "none"
+anims = {}

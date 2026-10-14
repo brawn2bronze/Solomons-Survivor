@@ -1,0 +1,16 @@
+[gd_resource type="Resource" script_class="PassiveDef" load_steps=2 format=3]
+
+[ext_resource type="Script" path="res://data/defs/passive_def.gd" id="1_s"]
+
+[resource]
+script = ExtResource("1_s")
+id = "candy_trail"
+display_name = "Candy Trail"
+description = "Drops enchanted candy that sticks (stuns) ground foes who step on it. The harvest claims the slow."
+behavior = "turds"
+audio_event = "goblin_hit"
+base = {"interval": 3.0, "lifetime": 14.0, "max_turds": 4, "poison_dps": 0.0, "poison_time": 4.0, "radius": 18.0, "stun": 0.8}
+branches = [{"id": "a", "name": "Sticky Toffee", "desc": "More candy on the ground, dropped faster. Cover the arena.", "on_pick": {"max_turds": ["add", 2], "interval": ["mul", 0.85]}, "per_level": {"max_turds": ["add", 1]}, "flags": {}}, {"id": "b", "name": "Hexed Sweets", "desc": "Candy turns poisonous, burning foes over time.", "on_pick": {"poison_dps": ["set", 5.0]}, "per_level": {"poison_dps": ["mul", 1.25]}, "flags": {}}]
+level_scaling = {"stun": ["mul", 1.05]}
+max_level = 8
+color = Color(1.000, 0.750, 0.900, 1)

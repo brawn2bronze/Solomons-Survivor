@@ -1,0 +1,23 @@
+[gd_resource type="Resource" script_class="WeaponDef" load_steps=2 format=3]
+
+[ext_resource type="Script" path="res://data/defs/weapon_def.gd" id="1_s"]
+
+[resource]
+script = ExtResource("1_s")
+id = "pickup_shamir_tooth"
+display_name = "Shamir's Tooth"
+description = "Rare treasure weapon. Blinks between the toughest enemies nearby, stabbing each one, then snaps back."
+behavior = "flicker_strike"
+audio_event = "katana_slash"
+base = {"damage": 35.0, "cooldown": 6.0, "count": 5, "range": 420.0, "hop_interval": 0.09, "return_delay": 0.12, "retry_delay": 0.4, "land_offset": 20.0, "knockback": 60.0}
+branches = [{"id": "a", "name": "Deep Cut", "desc": "Deeper cuts: much harder stabs.", "on_pick": {"damage": ["mul", 1.35]}, "per_level": {"damage": ["mul", 1.12]}, "flags": {}}, {"id": "b", "name": "Long Hunt", "desc": "Hunt further, stab more foes.", "on_pick": {"count": ["add", 1], "range": ["mul", 1.2]}, "per_level": {"count": ["add", 0.5], "range": ["mul", 1.06]}, "flags": {}}]
+level_scaling = {"damage": ["mul", 1.12], "count": ["add", 3.0]}
+max_level = 5
+color = Color(0.588, 0.863, 1.0, 1)
+icon = ""
+icon_frames = 1
+icon_fps = 8.0
+preview_kind = "none"
+anims = {}
+rarity = 1
+unlock_hint = ""

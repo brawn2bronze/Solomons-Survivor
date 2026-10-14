@@ -1,0 +1,21 @@
+[gd_resource type="Resource" script_class="PassiveDef" load_steps=2 format=3]
+
+[ext_resource type="Script" path="res://data/defs/passive_def.gd" id="1_s"]
+
+[resource]
+script = ExtResource("1_s")
+id = "saprotroph"
+display_name = "Saprotroph"
+description = "Fallen enemies rot into nutrient blooms. Absorb them for HP and stacking Nutrient (+damage, +speed)."
+behavior = "nutrient_bloom"
+audio_event = "goblin_hit"
+base = {"bloom_chance": 0.5, "bloom_life": 6.0, "max_blooms": 30, "absorb_radius": 40.0, "auto_absorb_radius": 0.0, "heal_per_bloom": 0.3, "max_stacks": 10, "stack_hold": 5.0, "stack_decay": 1.0, "dmg_per_stack": 0.015, "speed_per_stack": 0.01, "shield_per_overflow": 0.0, "shield_cap_pct": 0.0, "aura_radius": 0.0, "aura_dmg": 0.0, "aura_tick": 0.5, "aura_radius_per_stack": 0.0, "aura_dmg_per_stack": 0.0, "mutualist": 0, "antibiotic": 0}
+branches = [{"id": "a", "name": "Mycorrhizal Exchange", "desc": "Hyphae reach out and pull blooms in from afar. Nutrient beyond the cap becomes armor.", "on_pick": {"auto_absorb_radius": ["set", 90.0], "shield_per_overflow": ["set", 3.0], "shield_cap_pct": ["set", 0.25], "bloom_life": ["add", 3.0], "heal_per_bloom": ["add", 0.2], "mutualist": ["set", 1]}, "per_level": {"auto_absorb_radius": ["add", 10.0], "shield_per_overflow": ["add", 0.8], "heal_per_bloom": ["add", 0.05]}, "flags": {"mutualist": true}}, {"id": "b", "name": "Antibiosis", "desc": "Secrete antibiotics: a toxic aura that grows with Nutrient. Trades speed and healing for damage.", "on_pick": {"aura_radius": ["set", 70.0], "aura_dmg": ["set", 2.0], "aura_radius_per_stack": ["set", 6.0], "aura_dmg_per_stack": ["set", 0.4], "dmg_per_stack": ["set", 0.01], "speed_per_stack": ["set", -0.013], "heal_per_bloom": ["add", -0.2], "bloom_life": ["add", -2.0], "antibiotic": ["set", 1]}, "per_level": {"aura_radius": ["add", 4.0], "aura_dmg": ["add", 0.6], "aura_dmg_per_stack": ["add", 0.06]}, "flags": {"antibiotic": true}}]
+level_scaling = {"bloom_chance": ["add", 0.05], "heal_per_bloom": ["add", 0.1], "dmg_per_stack": ["add", 0.002], "speed_per_stack": ["add", 0.0015], "stack_hold": ["add", 0.3]}
+max_level = 8
+color = Color(0.95, 0.8, 0.45, 1)
+icon = ""
+icon_frames = 1
+icon_fps = 8.0
+preview_kind = "none"
+anims = {}

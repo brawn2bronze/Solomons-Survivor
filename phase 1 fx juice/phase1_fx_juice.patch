@@ -1,0 +1,420 @@
+--- a/autoload/game.gd
++++ b/autoload/game.gd
+@@ -20,6 +20,14 @@
+ var dev_config: Dictionary = {}
+ var godmode := false
+ 
++# --- Game-feel settings (Options panel, persisted). 1.0 = full strength, 0.0 = off. ---
++const FX_SETTINGS_PATH := "user://fx_settings.cfg"
++var fx_shake := 1.0          ## scales every Game.shake() request
++var fx_hitstop := 1.0        ## scales hit-stop duration (0 disables freezes)
++var fx_flash := 1.0          ## scales full-screen flashes (World.flash_screen)
++var _hs_end_ms := 0          ## real-time msec when the running hit-stop ends
++var _time_locked := false    ## death slow-mo owns Engine.time_scale; hit-stops are ignored
++
+ 
+ ## Default sandbox settings. DevMenu edits a copy of this.
+ ## Minimal pre-run: character + enemy whitelist + elites-only.
+@@ -42,6 +50,7 @@
+ 
+ func _ready() -> void:
+ 	process_mode = Node.PROCESS_MODE_ALWAYS
++	load_fx_settings()
+ 	_add_action("move_left", [KEY_A, KEY_LEFT])
+ 	_add_action("move_right", [KEY_D, KEY_RIGHT])
+ 	_add_action("move_up", [KEY_W, KEY_UP])
+@@ -59,14 +68,25 @@
+ 		InputMap.action_add_event(action, ev)
+ 
+ 
++## Screen-shake request (scaled by the SHAKE option). World turns it into a decaying camera offset.
+ func shake(amount: float) -> void:
+-	shake_requested.emit(amount)
++	if fx_shake <= 0.0:
++		return
++	shake_requested.emit(amount * fx_shake)
+ 
+ 
+ ## Freeze-frame. Uses a real-time timer so it isn't slowed by the slowdown it causes.
++## Scaled by the HITSTOP option; a shorter request never cuts short a longer freeze already running.
+ func hit_stop(seconds: float, time_scale: float = 0.04) -> void:
+-	if get_tree().paused:
++	if get_tree().paused or _time_locked:
++		return
++	seconds *= fx_hitstop
++	if seconds <= 0.0:
++		return
++	var end_ms := Time.get_ticks_msec() + int(seconds * 1000.0)
++	if end_ms <= _hs_end_ms:
+ 		return
++	_hs_end_ms = end_ms
+ 	_hit_stop_token += 1
+ 	var token := _hit_stop_token
+ 	Engine.time_scale = time_scale
+@@ -75,6 +95,33 @@
+ 		Engine.time_scale = 1.0
+ 
+ 
++## Death slow-mo: takes ownership of the clock so a late hit-stop can't snap it back to 1.0.
++## Released by reset_time() (World.start / World._exit_tree).
++func lock_time_scale(time_scale: float) -> void:
++	_hit_stop_token += 1
++	_time_locked = true
++	Engine.time_scale = time_scale
++
++
+ func reset_time() -> void:
+ 	_hit_stop_token += 1
++	_time_locked = false
++	_hs_end_ms = 0
+ 	Engine.time_scale = 1.0
++
++
++func load_fx_settings() -> void:
++	var cf := ConfigFile.new()
++	if cf.load(FX_SETTINGS_PATH) != OK:
++		return
++	fx_shake = clampf(float(cf.get_value("fx", "shake", 1.0)), 0.0, 1.0)
++	fx_hitstop = clampf(float(cf.get_value("fx", "hitstop", 1.0)), 0.0, 1.0)
++	fx_flash = clampf(float(cf.get_value("fx", "flash", 1.0)), 0.0, 1.0)
++
++
++func save_fx_settings() -> void:
++	var cf := ConfigFile.new()
++	cf.set_value("fx", "shake", fx_shake)
++	cf.set_value("fx", "hitstop", fx_hitstop)
++	cf.set_value("fx", "flash", fx_flash)
++	cf.save(FX_SETTINGS_PATH)
+--- a/src/core/world.gd
++++ b/src/core/world.gd
+@@ -57,6 +57,7 @@
+ var _pending_owed: Array = []  # owed bonus pairs ({kind "weapon"/"passive", tier 0 branch / 1 evo / 2 final}); shown free after the next pick
+ var _hurt := 0.0
+ var _flash := Color(0, 0, 0, 0)
++var _flash_rate := 3.0      # alpha lost per second by the current screen flash
+ var _music_key := ""
+ var _music_t := 0.0
+ var _over := false
+@@ -300,7 +301,7 @@
+ 	if not player.dead and player.max_hp > 0.0 and player.hp / player.max_hp < 0.3:
+ 		low = 0.25 + 0.15 * sin(Time.get_ticks_msec() * 0.008)
+ 	light_mat.set_shader_parameter("hurt", clampf(maxf(_hurt, low), 0.0, 1.0))
+-	_flash.a = maxf(0.0, _flash.a - delta * 3.0)
++	_flash.a = maxf(0.0, _flash.a - delta * _flash_rate)
+ 	light_mat.set_shader_parameter("flash_color", _flash)
+ 	_music_t -= delta
+ 	if _music_t <= 0.0 and sim_running:
+@@ -330,8 +331,14 @@
+ 		hud.announce(text, danger)
+ 
+ 
+-func flash_screen(c: Color) -> void:
++## Full-screen colour pulse (scaled by the FLASH option). A weaker flash never overrides a stronger
++## one that is still fading; fade_rate is alpha lost per second.
++func flash_screen(c: Color, fade_rate: float = 3.0) -> void:
++	c.a *= Game.fx_flash
++	if c.a <= 0.0 or c.a < _flash.a:
++		return
+ 	_flash = c
++	_flash_rate = fade_rate
+ 
+ 
+ func hurt_flash() -> void:
+@@ -922,7 +929,7 @@
+ 	Meta.flush()
+ 	sim_running = false
+ 	Audio.stop_music(1.0)
+-	Engine.time_scale = 0.35
++	Game.lock_time_scale(0.35)
+ 	await get_tree().create_timer(1.1, true, false, true).timeout
+ 	Engine.time_scale = 1.0
+ 	get_tree().paused = true
+--- a/src/core/enemy_manager.gd
++++ b/src/core/enemy_manager.gd
+@@ -72,6 +72,7 @@
+     var spiral_ang := 0.0
+     var spiral_sign := 1.0
+     var spiral_fired := 0
++    var enraged_seen := false     # boss: enrage callout already fired
+ 
+ static var _flash_material: ShaderMaterial
+ 
+@@ -236,6 +237,7 @@
+     e.spiral_ang = 0.0
+     e.spiral_sign = 1.0
+     e.spiral_fired = 0
++    e.enraged_seen = false
+     e.phase = randf() * TAU
+     e.web = null
+     var sp := e.sprite
+@@ -564,6 +566,9 @@
+ func _boss(e: E, delta: float, dir: Vector2, dist: float) -> Vector2:
+     var d = e.def
+     var enraged: bool = e.hp < e.max_hp * float(d.enrage_hp_fraction)
++    if enraged and not e.enraged_seen:
++        e.enraged_seen = true
++        world.fx.enrage_feel(e.pos)
+     _spiral_tick(e, d, delta)
+     e.shoot_t -= delta * e.atk_slow
+     if e.shoot_t <= 0.0 and dist < BOSS_FIRE_RANGE:
+@@ -775,11 +780,13 @@
+         amount *= 2.0
+     e.hp -= amount
+     _maybe_execute(e)
+-    e.flash = 0.09
++    e.flash = 0.14 if crit else 0.09
+     if knock_force > 0.0:
+         e.knock += knock_dir.normalized() * knock_force * (0.35 if e.is_elite else 1.0)
+     world.fx.damage_number(e.pos + Vector2(randf_range(-4, 4), -e.radius * 1.5), amount, crit, e.is_elite)
+     world.fx.hit_sparks(e.pos, knock_dir, tint, 4 if not crit else 8)
++    if crit:
++        world.fx.crit_feel(e.pos, e.is_elite)
+     Audio.sfx(e.def.hit_event, -9.0)
+     if e.hp <= 0.0:
+         _kill(e)
+@@ -830,6 +837,10 @@
+     if e.is_elite:
+         world.chests.drop(e.pos)
+     world.fx.death_burst(e.pos, e.def, e.is_elite)
++    if float(e.def.boss_time) > 0.0:
++        world.fx.boss_kill_feel(e.pos)
++    elif e.is_elite:
++        world.fx.elite_kill_feel(e.pos)
+     Audio.sfx("enemy_death", -5.0)
+     world.on_kill(e)
+     _free.append(e)
+--- a/src/core/fx_manager.gd
++++ b/src/core/fx_manager.gd
+@@ -1,6 +1,7 @@
+ class_name FxManager
+ extends Node2D
+-## All transient visual feedback: sparks, death bursts, slash arcs, rings, damage numbers, ambient dust.
++## All transient visual feedback: sparks, death bursts, slash arcs, rings, damage numbers, floating text,
++## impact-feel tiers (shake + hit-stop + pulse), ambient dust.
+ ## Everything is a pooled struct drawn from two _draw layers (additive glow + normal), so there are
+ ## no per-particle nodes. Caps keep the worst case bounded.
+ 
+@@ -41,6 +42,9 @@
+ 	var text := ""
+ 	var size := 16
+ 	var color := Color.WHITE
++	var max_life := 0.6
++	var pop := 0.0               # extra scale at spawn, eases back to 1.0 over ~0.35s
++	var keep_on_screen := false  # clamp to the viewport (off-screen boss callouts)
+ 
+ var world
+ var _particles: Array = []
+@@ -53,6 +57,8 @@
+ var _pcur := 0
+ var _strikes: Array = []
+ var _font: Font
++var _crit_fx_ms := 0        # real-time gates so dense fights can't strobe or stutter
++var _crit_stop_ms := 0
+ 
+ 
+ func setup(world_ref) -> void:
+@@ -209,21 +215,32 @@
+ 	s.width = 2.5
+ 
+ 
+-func damage_number(pos: Vector2, amount: float, crit: bool, elite: bool) -> void:
+-	var n: Num = null
++## Number-pool slot. A free slot always wins; when the pool is full, steal=true recycles the
++## entry closest to expiring, steal=false returns null (the caller drops its number).
++func _num(steal: bool = false) -> Num:
+ 	if _numbers.size() < MAX_NUMBERS:
+-		n = Num.new()
++		var n := Num.new()
+ 		_numbers.append(n)
+-	else:
+-		for x in _numbers:
+-			if x.life <= 0.0:
+-				n = x
+-				break
+-		if n == null:
+-			return
++		return n
++	var oldest: Num = null
++	for x in _numbers:
++		if x.life <= 0.0:
++			return x
++		if steal and (oldest == null or x.life < oldest.life):
++			oldest = x
++	return oldest
++
++
++func damage_number(pos: Vector2, amount: float, crit: bool, elite: bool) -> void:
++	var n := _num(false)
++	if n == null:
++		return
+ 	n.pos = pos
+ 	n.vel = Vector2(randf_range(-14.0, 14.0), -46.0 if not crit else -62.0)
+ 	n.life = 0.6 if not crit else 0.85
++	n.max_life = n.life
++	n.pop = 0.42 if crit else 0.0
++	n.keep_on_screen = false
+ 	n.text = str(int(round(amount)))
+ 	n.size = 15 if not crit else 22
+ 	n.color = Color(1.0, 0.92, 0.55) if crit else (Color(1.0, 0.6, 0.45) if elite else Color(1, 1, 1))
+@@ -231,6 +248,24 @@
+ 		n.text += "!"
+ 
+ 
++## Generic floating label ("STUNNED", pickup names, boss callouts). Rises `rise` world px while fading.
++## Shares the Num pool but steals the oldest slot when full, so a label is never dropped for a damage number.
++## size is in screen px; pop is the spawn-time scale kick; keep_on_screen pins it inside the viewport.
++func float_text(pos: Vector2, text: String, color: Color = Color.WHITE, size: int = 18, life: float = 1.1, rise: float = 18.0, pop: float = 0.3, keep_on_screen: bool = false) -> void:
++	var n := _num(true)
++	if n == null:
++		return
++	n.pos = pos
++	n.vel = Vector2(0.0, -rise * 3.0)    # drag is 3/s, so total rise ~= vel / 3
++	n.life = life
++	n.max_life = life
++	n.pop = pop
++	n.keep_on_screen = keep_on_screen
++	n.text = text
++	n.size = size
++	n.color = color
++
++
+ func level_up_burst(pos: Vector2) -> void:
+ 	ring(pos, 4.0, 150.0, 0.55, Color(1.0, 0.9, 0.4), 4.0)
+ 	ring(pos, 2.0, 96.0, 0.4, Color(1, 1, 1), 2.0)
+@@ -238,6 +273,54 @@
+ 		emit(pos, Vector2.from_angle(randf() * TAU) * randf_range(60.0, 260.0), randf_range(0.5, 0.9), randf_range(1.5, 3.0), Color.from_hsv(randf(), 0.5, 1.0), 0, 2.5, 90.0)
+ 
+ 
++# ------------------------------------------------------------------ impact feel tiers
++## Each tier is one call from gameplay code and bundles shake + hit-stop + pulse. All three
++## respect the Options sliders (via Game / World), and the cheap ones are rate-limited in real
++## time so a build that crits 30x/sec gets texture, not a strobe or a stutter.
++
++## Crit on an enemy: tiny ring + pop + nudge, hit-stop at most ~3x/sec.
++func crit_feel(pos: Vector2, elite: bool) -> void:
++	var now := Time.get_ticks_msec()
++	if now >= _crit_fx_ms:
++		_crit_fx_ms = now + 90
++		ring(pos, 3.0, 30.0 if elite else 22.0, 0.16, Color(1.0, 0.88, 0.4), 2.0)
++		emit(pos, Vector2.ZERO, 0.07, 9.0, Color(1.0, 0.95, 0.7, 0.9), 1, 0.0)
++		Game.shake(1.2)
++	if now >= _crit_stop_ms:
++		_crit_stop_ms = now + 300
++		Game.hit_stop(0.03, 0.1)
++
++
++## Regular elite died: freeze, kick, warm glow pulse. (Rings/particles come from death_burst.)
++func elite_kill_feel(pos: Vector2) -> void:
++	Game.hit_stop(0.07, 0.05)
++	Game.shake(5.0)
++	emit(pos, Vector2.ZERO, 0.22, 34.0, Color(1.0, 0.9, 0.7, 0.55), 1, 0.0)
++	world.flash_screen(Color(1.0, 0.92, 0.75, 0.28), 2.5)
++
++
++## Unique boss died: long freeze, max shake, 3-ring shockwave, ember shower, white pulse.
++## (World's gold "Archive unsealed" flash is stronger and wins on top of this one.)
++func boss_kill_feel(pos: Vector2) -> void:
++	Game.hit_stop(0.16, 0.03)
++	Game.shake(9.0)
++	world.flash_screen(Color(1, 1, 1, 0.45), 1.6)
++	ring(pos, 6.0, 190.0, 0.7, Color(1.0, 0.85, 0.5), 5.0)
++	ring(pos, 4.0, 130.0, 0.5, Color(1, 1, 1), 3.0)
++	ring(pos, 2.0, 80.0, 0.35, Color(1.0, 0.6, 0.3), 2.0)
++	emit(pos, Vector2.ZERO, 0.35, 60.0, Color(1.0, 0.95, 0.8, 0.6), 1, 0.0)
++	for i in 48:
++		emit(pos, Vector2.from_angle(randf() * TAU) * randf_range(60.0, 340.0), randf_range(0.5, 1.1), randf_range(1.5, 3.4), Color.from_hsv(randf_range(0.05, 0.14), 0.6, 1.0), 0, 2.5, 90.0)
++
++
++## Boss crossed its enrage threshold: callout, red shockwave, kick, red pulse.
++func enrage_feel(pos: Vector2) -> void:
++	float_text(pos + Vector2(0, -34), "ENRAGED!", Color(1.0, 0.35, 0.25), 26, 1.6, 22.0, 0.5, true)
++	ring(pos, 8.0, 140.0, 0.5, Color(1.0, 0.3, 0.2), 4.0)
++	Game.shake(5.0)
++	world.flash_screen(Color(1.0, 0.15, 0.1, 0.22), 2.5)
++
++
+ func strike(pos: Vector2, size_scale: float = 0.9) -> void:
+ 	for st in _strikes:
+ 		if st.t >= 0.5:
+@@ -365,15 +448,20 @@
+ 
+ func _draw_numbers(canvas: Node2D) -> void:
+ 	var xf: Transform2D = get_viewport().get_canvas_transform()
++	var vs: Vector2 = get_viewport().get_visible_rect().size
+ 	for n in _numbers:
+ 		if n.life <= 0.0:
+ 			continue
+ 		var sp: Vector2 = xf * n.pos
+ 		var a := clampf(n.life * 4.0, 0.0, 1.0)
+-		var pop := 1.0 + maxf(0.0, n.life - 0.5) * 1.2 if n.size > 16 else 1.0
++		var pop_t := minf(0.35, n.max_life * 0.5)
++		var pop: float = 1.0 + n.pop * clampf((n.life - (n.max_life - pop_t)) / pop_t, 0.0, 1.0)
+ 		var fs := int(n.size * pop)
+ 		var w := _font.get_string_size(n.text, HORIZONTAL_ALIGNMENT_LEFT, -1, fs).x
+ 		var at := sp - Vector2(w * 0.5, 0.0)
++		if n.keep_on_screen:
++			at.x = clampf(at.x, 8.0, vs.x - w - 8.0)
++			at.y = clampf(at.y, float(fs) + 8.0, vs.y - 8.0)
+ 		canvas.draw_string_outline(_font, at, n.text, HORIZONTAL_ALIGNMENT_LEFT, -1, fs, 5, Color(0.05, 0.03, 0.08, a))
+ 		var c: Color = n.color
+ 		c.a = a
+--- a/src/player/player.gd
++++ b/src/player/player.gd
+@@ -399,6 +399,8 @@
+ 
+ 
+ func stun(seconds: float) -> void:
++	if stunned <= 0.0 and not dead and world != null:
++		world.fx.float_text(global_position + Vector2(0, -38), "STUNNED", Color(0.75, 0.85, 1.0), 16, 1.0, 14.0)
+ 	stunned = maxf(stunned, seconds)
+ 	vel = Vector2.ZERO
+ 
+--- a/src/ui/options_panel.gd
++++ b/src/ui/options_panel.gd
+@@ -1,7 +1,10 @@
+ class_name OptionsPanel
+ extends VBoxContainer
+-## Volume sliders (persisted by the audio manager) + fullscreen toggle. Used by main menu and pause menu.
++## Volume sliders (persisted by the audio manager) + game-feel sliders (shake / hitstop / flash,
++## persisted by Game) + fullscreen toggle. Used by main menu and pause menu.
+ 
++## [row label, Game property] - each property is a 0..1 strength.
++const FX_ROWS := [["SHAKE", "fx_shake"], ["HITSTOP", "fx_hitstop"], ["FLASH", "fx_flash"]]
+ 
+ var _fs: CheckButton
+ 
+@@ -11,6 +14,8 @@
+     add_child(UI.label("OPTIONS", 30, UI.GOLD, HORIZONTAL_ALIGNMENT_CENTER))
+     for ch in ["master", "music", "sfx"]:
+         _slider(ch)
++    for row in FX_ROWS:
++        _fx_slider(String(row[0]), String(row[1]))
+     _fs = CheckButton.new()
+     _fs.text = "Fullscreen"
+     _fs.add_theme_font_size_override("font_size", 20)
+@@ -76,3 +81,25 @@
+     s.value_changed.connect(_on_volume.bind(channel))
+     row.add_child(s)
+     add_child(row)
++
++
++func _fx_slider(label: String, key: String) -> void:
++    var row := HBoxContainer.new()
++    row.add_theme_constant_override("separation", 12)
++    var l := UI.label(label, 20, UI.TEXT)
++    l.custom_minimum_size = Vector2(110, 0)
++    row.add_child(l)
++    var s := HSlider.new()
++    s.min_value = 0.0
++    s.max_value = 1.0
++    s.step = 0.05
++    s.value = float(Game.get(key))
++    s.custom_minimum_size = Vector2(240, 28)
++    s.value_changed.connect(_on_fx_value.bind(key))
++    row.add_child(s)
++    add_child(row)
++
++
++func _on_fx_value(v: float, key: String) -> void:
++    Game.set(key, v)
++    Game.save_fx_settings()

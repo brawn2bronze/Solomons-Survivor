@@ -1,0 +1,22 @@
+[gd_resource type="Resource" script_class="CharacterDef" load_steps=2 format=3]
+
+[ext_resource type="Script" path="res://data/defs/character_def.gd" id="1_s"]
+
+[resource]
+script = ExtResource("1_s")
+id = "harpy"
+display_name = "Harpy Eagle"
+title = "Queen of the Canopy"
+roster_order = 8
+roster_status = 1
+unlock_hint = "Locked - unlocks in the full release."
+blurb = "Flies: ground melee cannot touch you. Aerial enemies and projectiles knock you down for up to 5s."
+sprite = "res://art/characters/harpy.png"
+frames = 8
+frame_size = 64
+weapon_id = "screech"
+passive_id = "aerial_strike"
+base_stats = {"max_hp": 100, "move_speed": 115, "damage": 0.85, "defense": 1.0, "regen": 0.0, "area": 1.0, "cooldown": 1.0, "pickup_radius": 55, "luck": 0.0}
+flags = {"flying": true, "knockdown_seconds": 5.0}
+color = Color(0.784, 0.745, 0.667, 1)
+playstyles = ["Sonic: long-range piercing screech waves", "Echo: consecutive screeches for burst", "Assassin dive vs. evasive dodger"]

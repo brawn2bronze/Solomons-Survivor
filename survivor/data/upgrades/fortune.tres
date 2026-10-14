@@ -1,0 +1,15 @@
+[gd_resource type="Resource" script_class="UpgradeDef" load_steps=2 format=3]
+
+[ext_resource type="Script" path="res://data/defs/upgrade_def.gd" id="1_s"]
+
+[resource]
+script = ExtResource("1_s")
+id = "fortune"
+display_name = "Fortune"
+description = "+10% luck (better level-up offers)"
+stat = "luck"
+op = "add"
+value = 0.1
+max_level = 5
+color = Color(0.980, 0.863, 0.353, 1)
+icon = "res://art/upgrades/fortune.png"

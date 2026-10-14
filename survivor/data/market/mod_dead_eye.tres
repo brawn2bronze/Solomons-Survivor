@@ -1,0 +1,16 @@
+[gd_resource type="Resource" script_class="MarketItemDef" load_steps=2 format=3]
+
+[ext_resource type="Script" path="res://data/defs/market_item_def.gd" id="1_s"]
+
+[resource]
+script = ExtResource("1_s")
+id = "mod_dead_eye"
+kind = 1
+weapon_id = "pickup_rifle"
+display_name = "Dead-Eye"
+description = "Every 4th shot is a heavy slug: triple damage, pierces 3 more, bigger round."
+cost = 520
+sort_order = 100
+ops = {}
+flags = {"heavy_every": 4, "heavy_mult": 3.0, "heavy_pierce": 3}
+

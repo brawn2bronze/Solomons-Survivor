@@ -1,0 +1,17 @@
+[gd_resource type="Resource" script_class="MarketItemDef" load_steps=2 format=3]
+
+[ext_resource type="Script" path="res://data/defs/market_item_def.gd" id="1_s"]
+
+[resource]
+script = ExtResource("1_s")
+id = "mod_hearty_meal"
+kind = 1
+weapon_id = "pickup_energy_food"
+display_name = "Hearty Meal"
+description = "Each snack also heals 30% of your maximum health."
+cost = 480
+sort_order = 107
+ops = {}
+flags = {"heal_pct": 0.3}
+icon = "res://art/market/energy_food.png"
+

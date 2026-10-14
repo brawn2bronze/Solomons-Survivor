@@ -1,0 +1,33 @@
+[gd_resource type="Resource" script_class="EnemyDef" load_steps=2 format=3]
+
+[ext_resource type="Script" path="res://data/defs/enemy_def.gd" id="1_s"]
+
+[resource]
+script = ExtResource("1_s")
+id = "bone_broker"
+display_name = "Asmodeus, Broker of Bones"
+family = "skeleton"
+max_hp = 8000.0
+speed = 46.0
+contact_damage = 40.0
+xp = 400
+radius = 26.0
+sprite = "res://art/enemies/skeleton.png"
+frames = 4
+behavior = "boss"
+height = 0
+is_elite = true
+can_hit_flying = true
+hit_event = "skeleton_hit"
+sprite_scale = 3.0
+spawn_weight = 0.0
+spawn_start = 1500.0
+spawn_end = 9999.0
+elite_every = 0.0
+shoot_interval = 3.2
+shoot_speed = 150.0
+shoot_damage = 24.0
+boss_time = 1500.0
+boss_unlock = "black_market"
+coin_drop = 160
+

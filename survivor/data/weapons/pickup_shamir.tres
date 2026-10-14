@@ -1,0 +1,23 @@
+[gd_resource type="Resource" script_class="WeaponDef" load_steps=2 format=3]
+
+[ext_resource type="Script" path="res://data/defs/weapon_def.gd" id="1_s"]
+
+[resource]
+script = ExtResource("1_s")
+id = "pickup_shamir"
+display_name = "Shamir"
+description = "Legendary treasure weapon. Burst from the earth astride the worm that split stone for Solomon's Temple. Ride fast and shred everything touched: lesser demons die, mighty ones lose chunks of max HP."
+behavior = "worm_ride"
+audio_event = "katana_slash"
+base = {"duration": 4.0, "cooldown": 14.0, "speed_mult": 2.2, "trigger_range": 480.0, "retry_delay": 0.5, "shred_radius": 64.0, "hit_interval": 0.1, "elite_interval": 0.5, "elite_pct": 0.04, "boss_pct": 0.015, "knockback": 60.0}
+branches = [{"id": "a", "name": "Deep Maw", "desc": "Gnaw deeper chunks from the mighty.", "on_pick": {"elite_pct": ["mul", 1.35], "boss_pct": ["mul", 1.35]}, "per_level": {"elite_pct": ["mul", 1.12], "boss_pct": ["mul", 1.12]}, "flags": {}}, {"id": "b", "name": "Long Ride", "desc": "Ride longer, wider, sooner.", "on_pick": {"duration": ["add", 1.5], "cooldown": ["mul", 0.9], "shred_radius": ["add", 12.0]}, "per_level": {"duration": ["add", 0.25], "cooldown": ["mul", 0.97]}, "flags": {}}]
+level_scaling = {"duration": ["add", 0.25], "cooldown": ["add", -1.0], "elite_pct": ["mul", 1.15], "boss_pct": ["mul", 1.15]}
+max_level = 8
+color = Color(0.549, 0.42, 0.62, 1)
+icon = ""
+icon_frames = 1
+icon_fps = 8.0
+preview_kind = "none"
+anims = {}
+rarity = 2
+unlock_hint = "Locked - bound by a seal yet unwritten."

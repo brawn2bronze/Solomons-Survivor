@@ -1,0 +1,21 @@
+[gd_resource type="Resource" script_class="WeaponDef" load_steps=2 format=3]
+
+[ext_resource type="Script" path="res://data/defs/weapon_def.gd" id="1_s"]
+
+[resource]
+script = ExtResource("1_s")
+id = "pickup_blunderbuss"
+display_name = "Blunderbuss"
+description = "Treasure weapon. Short-range scatter blast with heavy knockback."
+behavior = "pickup_volley"
+audio_event = "hand_cannon"
+base = {"damage": 9.0, "cooldown": 1.1, "count": 7, "spread_deg": 45.0, "pierce": 0, "range": 300.0, "speed": 420.0, "radius": 8.0, "knockback": 240.0}
+branches = [{"id": "a", "name": "Scattergun", "desc": "More pellets per blast.", "on_pick": {"count": ["add", 2]}, "per_level": {"damage": ["mul", 1.08]}, "flags": {}}, {"id": "b", "name": "Heavy Load", "desc": "Bigger, harder-hitting pellets.", "on_pick": {"damage": ["mul", 1.3], "radius": ["mul", 1.15]}, "per_level": {"damage": ["mul", 1.1]}, "flags": {}}]
+level_scaling = {"damage": ["mul", 1.12]}
+max_level = 5
+color = Color(1.000, 0.800, 0.500, 1)
+icon = "res://art/weapons/blunderbuss.png"
+icon_frames = 1
+icon_fps = 8.0
+preview_kind = "static"
+anims = {}

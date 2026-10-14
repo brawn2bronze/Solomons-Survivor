@@ -1,0 +1,22 @@
+[gd_resource type="Resource" script_class="CharacterDef" load_steps=2 format=3]
+
+[ext_resource type="Script" path="res://data/defs/character_def.gd" id="1_s"]
+
+[resource]
+script = ExtResource("1_s")
+id = "fun_guy"
+display_name = "Fun-Guy"
+title = "Mind Beneath the Moss"
+roster_order = 12
+roster_status = 2
+blurb = "A mushroom that outlived its forest and woke up. Fruiting nodes erupt beneath nearby foes and link into a slowing web; the fallen rot into nutrient blooms that feed it."
+sprite = "res://art/characters/fun_guy.png"
+frames = 6
+frame_size = 64
+weapon_id = "hyphal_net"
+passive_id = "saprotroph"
+base_stats = {"max_hp": 110, "move_speed": 95, "damage": 0.9, "defense": 1.0, "regen": 1.0, "area": 1.2, "cooldown": 1.0, "pickup_radius": 85, "luck": 0.0}
+flags = {"low_hp_scaling": {"regen": 1.2}}
+color = Color(0.55, 0.92, 0.62, 1)
+playstyles = ["Mother Hub: Anastomosis mesh plus Mycorrhizal Exchange shields, hold ground inside your nodes", "Infection Kiter: Ballistospore plus Mycorrhizal Exchange, chain-infect packs and harvest blooms on the move", "Toxic Brawler: Anastomosis plus Antibiosis, wade in while threads and the aura melt the pack"]
+ability_anims = {}

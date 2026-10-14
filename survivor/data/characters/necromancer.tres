@@ -1,0 +1,22 @@
+[gd_resource type="Resource" script_class="CharacterDef" load_steps=2 format=3]
+
+[ext_resource type="Script" path="res://data/defs/character_def.gd" id="1_s"]
+
+[resource]
+script = ExtResource("1_s")
+id = "necromancer"
+display_name = "Necromancer"
+title = "Keeper of Bones"
+roster_order = 9
+roster_status = 1
+unlock_hint = "Locked - unlocks in the full release."
+blurb = "Sturdy, regenerating, slow. Ghost skulls pierce everything, and the dead fight for you."
+sprite = "res://art/characters/necromancer.png"
+frame_size = 64
+weapon_id = "skull_summon"
+passive_id = "raise_dead"
+base_stats = {"max_hp": 150, "move_speed": 90, "damage": 0.75, "defense": 1.0, "regen": 1.2, "area": 1.0, "cooldown": 1.0, "pickup_radius": 55, "luck": 0.0}
+flags = {}
+color = Color(0.314, 0.784, 0.706, 1)
+playstyles = ["Skull barrage: many fast skulls", "Grand skull: one huge crushing skull", "Legion: keep a growing army of raised dead"]
+ability_anims = {"base": {"sprite": "res://art/characters/necromancer.png", "frames": 6, "fps": 6.0}, "wA": {"sprite": "res://art/fx/skull_projectile.png", "frames": 2, "fps": 8.0}, "wB": {"sprite": "res://art/fx/skull_projectile.png", "frames": 2, "fps": 4.0}, "pA": {"sprite": "res://art/passives/raise_dead.png", "frames": 1, "fps": 8.0}, "pB": {"sprite": "res://art/passives/raise_dead.png", "frames": 1, "fps": 8.0}}

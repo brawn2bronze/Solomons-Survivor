@@ -1,0 +1,21 @@
+[gd_resource type="Resource" script_class="WeaponDef" load_steps=2 format=3]
+
+[ext_resource type="Script" path="res://data/defs/weapon_def.gd" id="1_s"]
+
+[resource]
+script = ExtResource("1_s")
+id = "pickup_shurikens"
+display_name = "Shurikens"
+description = "Treasure weapon. Throws a fast fan of piercing shurikens."
+behavior = "pickup_volley"
+audio_event = "revolver_shot"
+base = {"damage": 8.0, "cooldown": 0.4, "count": 3, "spread_deg": 25.0, "pierce": 1, "range": 480.0, "speed": 560.0, "radius": 3.0, "knockback": 20.0}
+branches = [{"id": "a", "name": "Fan Throw", "desc": "Throw more shurikens per volley.", "on_pick": {"count": ["add", 1]}, "per_level": {"damage": ["mul", 1.1]}, "flags": {}}, {"id": "b", "name": "Sharpened", "desc": "Harder, more piercing throws.", "on_pick": {"damage": ["mul", 1.3]}, "per_level": {"pierce": ["add", 1]}, "flags": {}}]
+level_scaling = {"damage": ["mul", 1.12]}
+max_level = 5
+color = Color(0.700, 0.700, 0.800, 1)
+icon = "res://art/weapons/shuriken.png"
+icon_frames = 3
+icon_fps = 10.0
+preview_kind = "spin"
+anims = {}

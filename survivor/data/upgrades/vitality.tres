@@ -1,0 +1,15 @@
+[gd_resource type="Resource" script_class="UpgradeDef" load_steps=2 format=3]
+
+[ext_resource type="Script" path="res://data/defs/upgrade_def.gd" id="1_s"]
+
+[resource]
+script = ExtResource("1_s")
+id = "vitality"
+display_name = "Vitality"
+description = "+24 max HP (heals 24)"
+stat = "max_hp"
+op = "add"
+value = 24.0
+max_level = 5
+color = Color(0.863, 0.235, 0.353, 1)
+icon = "res://art/upgrades/vitality.png"

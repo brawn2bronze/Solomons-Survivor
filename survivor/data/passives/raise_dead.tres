@@ -1,0 +1,21 @@
+[gd_resource type="Resource" script_class="PassiveDef" load_steps=2 format=3]
+
+[ext_resource type="Script" path="res://data/defs/passive_def.gd" id="1_s"]
+
+[resource]
+script = ExtResource("1_s")
+id = "raise_dead"
+display_name = "Raise Dead"
+description = "Chance to raise an enemy on death (scales with player level). Raised enemies fight for you briefly at base stats. Elites are immune."
+behavior = "raise_dead"
+audio_event = "skull_projectile"
+base = {"chance_base": 0.06, "chance_per_level": 0.004, "max_minions": 3, "duration": 12.0, "stat_mult": 1.0}
+branches = [{"id": "a", "name": "Legion", "desc": "Increase how many raised dead you can have.", "on_pick": {"max_minions": ["add", 2]}, "per_level": {"max_minions": ["add", 1]}, "flags": {}}, {"id": "b", "name": "Undying Bond", "desc": "Increase duration and base stats of raised dead.", "on_pick": {"duration": ["mul", 1.4], "stat_mult": ["add", 0.25]}, "per_level": {"duration": ["mul", 1.1], "stat_mult": ["add", 0.12]}, "flags": {}}]
+level_scaling = {"chance_base": ["add", 0.01]}
+max_level = 8
+color = Color(0.353, 0.863, 0.706, 1)
+icon = "res://art/passives/raise_dead.png"
+icon_frames = 1
+icon_fps = 8.0
+preview_kind = "static"
+anims = {}

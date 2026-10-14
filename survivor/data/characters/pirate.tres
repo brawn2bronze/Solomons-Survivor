@@ -1,0 +1,20 @@
+[gd_resource type="Resource" script_class="CharacterDef" load_steps=2 format=3]
+
+[ext_resource type="Script" path="res://data/defs/character_def.gd" id="1_s"]
+
+[resource]
+script = ExtResource("1_s")
+id = "pirate"
+display_name = "Pirate"
+title = "Scourge of the Bay"
+roster_order = 3
+roster_status = 0
+blurb = "Huge HP, slow legs. One enormous piercing shot, and a crew that multiplies it."
+sprite = "res://art/characters/pirate.png"
+frame_size = 64
+weapon_id = "hand_cannon"
+passive_id = "pirate_crew"
+base_stats = {"max_hp": 160, "move_speed": 92, "damage": 1.0, "defense": 2.0, "regen": 0.0, "area": 1.0, "cooldown": 1.0, "pickup_radius": 55, "luck": 0.0}
+flags = {}
+color = Color(0.784, 0.235, 0.235, 1)
+playstyles = ["Artillery: bigger balls, longer lines of pierce", "Shrapnel storm: every hit sprays more shots", "Fleet admiral: stack allies for volley chaos"]

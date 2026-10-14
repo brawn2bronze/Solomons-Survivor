@@ -1,0 +1,21 @@
+[gd_resource type="Resource" script_class="WeaponDef" load_steps=2 format=3]
+
+[ext_resource type="Script" path="res://data/defs/weapon_def.gd" id="1_s"]
+
+[resource]
+script = ExtResource("1_s")
+id = "merlins_book"
+display_name = "Merlin's Book"
+description = "Zaps foes with a lightning bolt that chains to other enemies."
+behavior = "chain_lightning"
+audio_event = "lightning_bolt"
+base = {"damage": 14.0, "cooldown": 1.1, "chains": 2, "chain_range": 130.0, "range": 420.0, "orb": false, "orb_chains": 3, "orb_damage": 0.5, "orb_time": 3.0}
+branches = [{"id": "a", "name": "Storm Surge", "desc": "Stronger voltage and more chains.", "on_pick": {"damage": ["mul", 1.25], "chains": ["add", 2]}, "per_level": {"damage": ["mul", 1.1], "chains": ["add", 1]}, "flags": {}}, {"id": "b", "name": "Ball Lightning", "desc": "Leaves an orb that chains a fixed number of foes (lower damage, stays put).", "on_pick": {}, "per_level": {"orb_damage": ["mul", 1.12]}, "flags": {"orb": true}}]
+level_scaling = {"damage": ["mul", 1.1]}
+max_level = 8
+color = Color(0.471, 0.784, 1.000, 1)
+icon = "res://art/weapons/merlins_book.png"
+icon_frames = 1
+icon_fps = 8.0
+preview_kind = "static"
+anims = {}

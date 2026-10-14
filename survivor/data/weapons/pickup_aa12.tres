@@ -1,0 +1,16 @@
+[gd_resource type="Resource" script_class="WeaponDef" load_steps=2 format=3]
+
+[ext_resource type="Script" path="res://data/defs/weapon_def.gd" id="1_s"]
+
+[resource]
+script = ExtResource("1_s")
+id = "pickup_aa12"
+display_name = "Demon's Scattergun"
+description = "Forbidden weapon. Automatic shotgun: a wide volley of pellets."
+behavior = "pickup_volley"
+audio_event = "revolver_shot"
+base = {"damage": 7.0, "cooldown": 1.0, "count": 8, "spread_deg": 35.0, "pierce": 0, "range": 380.0, "speed": 520.0, "radius": 3.5, "knockback": 40.0}
+branches = [{"id": "a", "name": "Drum Mag", "desc": "More pellets per volley.", "on_pick": {"count": ["add", 2]}, "per_level": {"cooldown": ["mul", 0.95]}, "flags": {}}, {"id": "b", "name": "Rapid Auto", "desc": "Faster volleys.", "on_pick": {"cooldown": ["mul", 0.85]}, "per_level": {"damage": ["mul", 1.1]}, "flags": {}}]
+level_scaling = {"damage": ["mul", 1.12]}
+max_level = 5
+color = Color(0.400, 0.400, 0.500, 1)

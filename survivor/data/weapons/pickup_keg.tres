@@ -1,0 +1,21 @@
+[gd_resource type="Resource" script_class="WeaponDef" load_steps=2 format=3]
+
+[ext_resource type="Script" path="res://data/defs/weapon_def.gd" id="1_s"]
+
+[resource]
+script = ExtResource("1_s")
+id = "pickup_keg"
+display_name = "Keg of Gunpowder"
+description = "Treasure weapon. A huge slow keg blast that shakes the arena."
+behavior = "pickup_blast"
+audio_event = "hand_cannon"
+base = {"damage": 90.0, "cooldown": 4.5, "radius": 180.0, "range": 520.0}
+branches = [{"id": "a", "name": "Powder Keg+", "desc": "Devastating damage.", "on_pick": {"damage": ["mul", 1.35]}, "per_level": {"damage": ["mul", 1.12]}, "flags": {}}, {"id": "b", "name": "Barrel Blast", "desc": "Wider blast, shorter fuse.", "on_pick": {"radius": ["mul", 1.25], "cooldown": ["mul", 0.9]}, "per_level": {"cooldown": ["mul", 0.95]}, "flags": {}}]
+level_scaling = {"damage": ["mul", 1.12]}
+max_level = 5
+color = Color(0.900, 0.600, 0.200, 1)
+icon = "res://art/weapons/keg.png"
+icon_frames = 3
+icon_fps = 8.0
+preview_kind = "pulse"
+anims = {}

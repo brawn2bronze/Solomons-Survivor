@@ -1,0 +1,16 @@
+[gd_resource type="Resource" script_class="WeaponDef" load_steps=2 format=3]
+
+[ext_resource type="Script" path="res://data/defs/weapon_def.gd" id="1_s"]
+
+[resource]
+script = ExtResource("1_s")
+id = "pickup_cloak"
+display_name = "Solomon's Ward"
+description = "Forbidden weapon. A warded cloak that absorbs damage for a few seconds."
+behavior = "pickup_ward"
+audio_event = "horn_swipe"
+base = {"damage": 0.0, "cooldown": 25.0, "duration": 8.0, "armor_hp": 40.0}
+branches = [{"id": "a", "name": "Iron Lining", "desc": "The ward absorbs much more.", "on_pick": {"armor_hp": ["add", 20.0]}, "per_level": {"armor_hp": ["add", 10.0]}, "flags": {}}, {"id": "b", "name": "Long Watch", "desc": "The ward lasts longer.", "on_pick": {"duration": ["add", 2.0]}, "per_level": {"duration": ["add", 0.5]}, "flags": {}}]
+level_scaling = {"armor_hp": ["add", 8.0]}
+max_level = 5
+color = Color(0.500, 0.600, 1.000, 1)

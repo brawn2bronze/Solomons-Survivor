@@ -1,0 +1,21 @@
+[gd_resource type="Resource" script_class="WeaponDef" load_steps=2 format=3]
+
+[ext_resource type="Script" path="res://data/defs/weapon_def.gd" id="1_s"]
+
+[resource]
+script = ExtResource("1_s")
+id = "pickup_caltrops"
+display_name = "Cursed Spikes"
+description = "Forbidden weapon. Scatters caltrops that shred enemies who step on them."
+behavior = "pickup_caltrops"
+audio_event = "fang_bite"
+base = {"damage": 8.0, "interval": 1.0, "lifetime": 12.0, "max_caltrops": 10, "radius": 14.0, "rehit": 1.0}
+branches = [{"id": "a", "name": "Rusty Field", "desc": "Cover more ground.", "on_pick": {"max_caltrops": ["add", 3], "radius": ["mul", 1.25]}, "per_level": {"max_caltrops": ["add", 1]}, "flags": {}}, {"id": "b", "name": "Deep Cuts", "desc": "Faster, crueler drops.", "on_pick": {"damage": ["mul", 1.35], "interval": ["mul", 0.85]}, "per_level": {"damage": ["mul", 1.12]}, "flags": {}}]
+level_scaling = {"damage": ["mul", 1.12]}
+max_level = 5
+color = Color(0.600, 0.600, 0.600, 1)
+icon = "res://art/weapons/caltrops.png"
+icon_frames = 3
+icon_fps = 6.0
+preview_kind = "pulse"
+anims = {}

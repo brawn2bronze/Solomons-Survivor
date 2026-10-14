@@ -1,0 +1,13 @@
+[gd_resource type="Resource" script_class="MarketItemDef" load_steps=2 format=3]
+
+[ext_resource type="Script" path="res://data/defs/market_item_def.gd" id="1_s"]
+
+[resource]
+script = ExtResource("1_s")
+id = "rent_pickup_energy_food"
+kind = 0
+weapon_id = "pickup_energy_food"
+cost = 40
+sort_order = 0
+icon = "res://art/market/energy_food.png"
+

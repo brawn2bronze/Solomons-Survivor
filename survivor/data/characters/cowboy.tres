@@ -1,0 +1,28 @@
+[gd_resource type="Resource" script_class="CharacterDef" format=3 uid="uid://2hfwtisjva6d"]
+
+[ext_resource type="Script" uid="uid://bnk2q7g2y08y" path="res://data/defs/character_def.gd" id="1_s"]
+
+[resource]
+script = ExtResource("1_s")
+id = "cowboy"
+display_name = "Cowboy"
+title = "The Drifter"
+roster_order = 1
+roster_status = 0
+blurb = "Balanced all-rounder. Six shots, a reload, and a whip for anything that gets too close."
+sprite = "res://art/characters/cowboy.png"
+weapon_id = "six_shooter"
+passive_id = "flailing_whip"
+base_stats = {
+"area": 1.0,
+"cooldown": 1.0,
+"damage": 1.0,
+"defense": 1.0,
+"luck": 0.0,
+"max_hp": 100,
+"move_speed": 110,
+"pickup_radius": 55,
+"regen": 0.0
+}
+color = Color(0.839, 0.627, 0.345, 1)
+playstyles = ["Gunslinger: shrink the reload, chain 6-round bursts", "Piercer: line enemies up, shoot through the pack", "Brawler: lean on the whip aura and stay in the crowd"]

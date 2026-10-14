@@ -1,0 +1,21 @@
+[gd_resource type="Resource" script_class="WeaponDef" load_steps=2 format=3]
+
+[ext_resource type="Script" path="res://data/defs/weapon_def.gd" id="1_s"]
+
+[resource]
+script = ExtResource("1_s")
+id = "pickup_rifle"
+display_name = "Seal-Breaker Musket"
+description = "Forbidden weapon. Fires a single long-range piercing slug."
+behavior = "pickup_volley"
+audio_event = "revolver_shot"
+base = {"damage": 14.0, "cooldown": 0.35, "count": 1, "spread_deg": 0.0, "pierce": 2, "range": 520.0, "speed": 640.0, "radius": 4.0, "knockback": 30.0}
+branches = [{"id": "a", "name": "Long Barrel", "desc": "Longer range, harder hits.", "on_pick": {"range": ["mul", 1.25]}, "per_level": {"damage": ["mul", 1.1]}, "flags": {}}, {"id": "b", "name": "Piercing Slugs", "desc": "Shots punch through more enemies.", "on_pick": {"pierce": ["add", 1]}, "per_level": {"pierce": ["add", 1]}, "flags": {}}]
+level_scaling = {"damage": ["mul", 1.12]}
+max_level = 5
+color = Color(0.900, 0.900, 0.900, 1)
+icon = "res://art/weapons/rifle.png"
+icon_frames = 1
+icon_fps = 8.0
+preview_kind = "static"
+anims = {}

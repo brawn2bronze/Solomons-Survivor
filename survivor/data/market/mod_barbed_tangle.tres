@@ -1,0 +1,16 @@
+[gd_resource type="Resource" script_class="MarketItemDef" load_steps=2 format=3]
+
+[ext_resource type="Script" path="res://data/defs/market_item_def.gd" id="1_s"]
+
+[resource]
+script = ExtResource("1_s")
+id = "mod_barbed_tangle"
+kind = 1
+weapon_id = "pickup_caltrops"
+display_name = "Barbed Tangle"
+description = "Enemies that step on a caltrop are slowed by half for 2.5s."
+cost = 500
+sort_order = 106
+ops = {}
+flags = {"slow_mult": 0.5, "slow_time": 2.5}
+

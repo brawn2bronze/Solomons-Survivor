@@ -1,0 +1,20 @@
+[gd_resource type="Resource" script_class="CharacterDef" load_steps=2 format=3]
+
+[ext_resource type="Script" path="res://data/defs/character_def.gd" id="1_s"]
+
+[resource]
+script = ExtResource("1_s")
+id = "jack"
+display_name = "Jack"
+title = "Lord of the Harvest"
+roster_order = 11
+roster_status = 2
+blurb = "A walking jack-o'-lantern. Hurls explosive pumpkins and seeds the arena with enchanted candy. The harvest comes for all."
+sprite = "res://art/characters/jack.png"
+frame_size = 64
+weapon_id = "pumpkin_hurl"
+passive_id = "candy_trail"
+base_stats = {"max_hp": 130, "move_speed": 102, "damage": 1.1, "defense": 1.0, "regen": 0.5, "area": 1.0, "cooldown": 1.0, "pickup_radius": 65, "luck": 0.0}
+flags = {}
+color = Color(1.000, 0.549, 0.149, 1)
+playstyles = ["Cluster bombardier: shrapnel pumpkins plus wide candy fields", "Grand-gourd siege: one colossal blast that one-shots packs", "Candy-swamp controller: hexed sweets poison while pumpkins zone"]
