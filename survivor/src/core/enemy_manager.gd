@@ -18,6 +18,7 @@ const BOSS_RING_ENRAGED := 22
 const BOSS_ENRAGE_HP := 0.4          # below this fraction of max hp the boss enrages
 const BOSS_ENRAGE_SPEED := 1.35
 const BOSS_ENRAGE_FIRE := 0.7        # enraged ring cooldown multiplier
+const BOSS_TELEGRAPH_T := 0.45       # cosmetic pre-warning window (shoot-timer seconds); never delays a volley
 const BLINK_WAIT_MIN := 2.0         # blink (reserved hunt-blink): stalk seconds before blink
 const BLINK_WAIT_MAX := 3.5
 const BLINK_VANISH_T := 0.12        # invisible + invulnerable window (matches white-out frame)
@@ -362,6 +363,23 @@ func _process(delta: float) -> void:
         if e.alive:
             _kill(e)
     _dead.clear()
+    for e in elites:
+        _elite_aura(e)
+
+
+## Ground glow + slow pulsing ring under elites and bosses (a persistent cue, so no shape-pool cost).
+## Elite = amber; boss = deep red, faster and hotter once enraged.
+func _elite_aura(e: E) -> void:
+    if not e.alive:
+        return
+    var col := Color(1.0, 0.7, 0.25)
+    var rate := 2.4
+    var rad: float = e.radius * 2.2 + 6.0
+    if float(e.def.boss_time) > 0.0:
+        col = Color(1.0, 0.3, 0.2) if e.enraged_seen else Color(0.85, 0.25, 0.35)
+        rate = 7.0 if e.enraged_seen else 2.0
+        rad = e.radius * 2.0 + 14.0
+    world.fx.cue_aura(e.get_instance_id(), 3, e.pos, rad, col, rate)
 
 
 func _update_enemy(e: E, delta: float, pp: Vector2) -> void:
@@ -592,8 +610,26 @@ func _boss(e: E, delta: float, dir: Vector2, dist: float) -> Vector2:
             _spiral_start(e, d)
         else:
             _ring_volley(e, d, dir, enraged)
+    elif e.shoot_t > 0.0 and e.shoot_t < BOSS_TELEGRAPH_T and dist < BOSS_FIRE_RANGE:
+        _boss_telegraph(e, d, dir, enraged)
     var move: Vector2 = _charger(e, delta, dir, dist)
     return move * (BOSS_ENRAGE_SPEED if enraged else 1.0)
+
+
+## Cosmetic pre-warning for the volley about to fire. It is read straight off the shoot timer, so it
+## never changes timing: orange converging ring before a spiral cast; pale ring + aim wedge before a
+## ring/fan volley (red-shifted when enraged). Refreshed every frame, gone ~0.1s after the boss fires.
+func _boss_telegraph(e: E, d, dir: Vector2, enraged: bool) -> void:
+    var charge: float = 1.0 - clampf(e.shoot_t / BOSS_TELEGRAPH_T, 0.0, 1.0)
+    var uid: int = e.get_instance_id()
+    var every: int = int(d.spiral_every)
+    var spiral_next: bool = every > 0 and int(d.spiral_projectile_count) > 0 and (e.volley + 1) % every == 0
+    var tint := Color(1.0, 0.5, 0.15) if spiral_next else Color(0.85, 0.95, 0.75)
+    if enraged:
+        tint = tint.lerp(Color(1.0, 0.3, 0.25), 0.5)
+    world.fx.cue_converge(uid, 0, e.pos, 150.0 if spiral_next else 130.0, 24.0, tint, charge)
+    if not spiral_next and int(d.projectile_count) >= 2:
+        world.fx.cue_wedge(uid, 1, e.pos + Vector2(0, -12), dir.angle(), deg_to_rad(float(d.projectile_spread_deg)), 190.0, tint, charge)
 
 
 func _ring_volley(e: E, d, dir: Vector2, enraged: bool) -> void:
@@ -659,6 +695,7 @@ func _spiral_tick(e: E, d, delta: float) -> void:
         e.spiral_fired += 1
         e.spiral_ang += step * e.spiral_sign
         world.projectiles.spawn_hostile(e.pos + Vector2(0, -12), Vector2.from_angle(e.spiral_ang) * speed, d.shoot_damage, d.can_hit_flying, opts)
+    world.fx.cue_sweep(e.get_instance_id(), 2, e.pos + Vector2(0, -12), e.spiral_ang, e.spiral_sign, 170.0, Color(1.0, 0.55, 0.2))
     if e.spiral_fired >= total:
         e.spiral_t = 0.0
 
@@ -849,7 +886,9 @@ func _kill(e: E) -> void:
     if e.is_elite:
         world.chests.drop(e.pos)
     world.fx.death_burst(e.pos, e.def, e.is_elite)
+    world.fx.signature_kill(e.pos, e.is_elite)
     if float(e.def.boss_time) > 0.0:
+        world.fx.clear_cues(e.get_instance_id())
         world.fx.boss_kill_feel(e.pos)
     elif e.is_elite:
         world.fx.elite_kill_feel(e.pos)

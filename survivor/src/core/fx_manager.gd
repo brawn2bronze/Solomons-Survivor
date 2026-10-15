@@ -4,6 +4,10 @@ extends Node2D
 ## impact-feel tiers (shake + hit-stop + pulse), ambient dust.
 ## Everything is a pooled struct drawn from two _draw layers (additive glow + normal), so there are
 ## no per-particle nodes. Caps keep the worst case bounded.
+## Shape kinds: ring, slash_arc, lash, bolt, star (sparkle), disc (flash / hollow marker), wedge (cone),
+## beam (straight ray). Persistent cues (cue_wedge / cue_converge / cue_sweep) are refreshed every frame
+## by their uid and vanish ~0.1s after it stops - used for boss telegraphs and elite/boss ground auras.
+## signature_kill() adds a small per-character flourish on each kill (budgeted, shed under load).
 
 const MAX_PARTICLES := 640
 const MAX_SHAPES := 96
@@ -15,6 +19,15 @@ const MAX_NUMBERS := 60
 const PRIO_AMBIENT := 0      # cosmetic spam (crit pops)
 const PRIO_NORMAL := 1       # default: weapon visuals, death rings
 const PRIO_IMPORTANT := 2    # boss attack cues, player-state feedback, boss death
+
+const MAX_CUES := 32
+const CUE_TTL := 0.12        # a cue disappears this long after its uid last refreshed it
+const CUE_FADE := 0.06       # ...fading out over the final stretch
+
+# Character kill signatures, matched as substrings of the CharacterDef id (index + 1 = signature number).
+const SIG_KEYS := ["cowboy", "ninja", "pirate", "paladin", "wizard", "spider", "minotaur", "harpy", "necro", "goose"]
+const SIG_BUDGET_MAX := 12.0   # burst allowance of non-elite signatures...
+const SIG_BUDGET_RATE := 40.0  # ...refilled per second, so a 100-kills/sec swarm can't spam them
 
 # Cosmetic load shedding: above this particle-pool fill, sparks / muzzle flashes / dust thin out
 # (down to 25% of their normal count at a full pool). Telegraphs, bursts and feel tiers are never shed.
@@ -33,7 +46,7 @@ class P:
 	var add := true
 
 class Shape:
-	var kind := 0            # 0 ring, 1 slash arc, 2 lash polyline, 3 bolt polyline
+	var kind := 0            # 0 ring, 1 slash arc, 2 lash, 3 bolt, 4 star, 5 disc, 6 wedge, 7 beam
 	var pos := Vector2.ZERO
 	var dir := 0.0
 	var r0 := 0.0
@@ -46,6 +59,20 @@ class Shape:
 	var pts := PackedVector2Array()
 	var flip := 1.0
 	var prio := 1            # PRIO_* - decides who gets evicted when the pool is full
+
+class Cue:
+	var uid := 0           # caller-chosen id (enemy instance id); with slot, identifies the cue
+	var slot := 0
+	var kind := 0            # 0 aim wedge, 1 converging ring, 2 rotating sweep, 3 ground aura
+	var pos := Vector2.ZERO
+	var dir := 0.0
+	var spread := 0.0
+	var length := 0.0        # wedge/sweep length, or converging ring start radius
+	var r_to := 0.0          # converging ring end radius
+	var flip := 1.0          # sweep direction (+1 / -1)
+	var color := Color.WHITE
+	var charge := 0.0        # 0..1: how close the warned-of attack is
+	var ttl := 0.0
 
 class Num:
 	var pos := Vector2.ZERO
@@ -71,6 +98,11 @@ var _strikes: Array = []
 var _font: Font
 var _crit_fx_ms := 0        # real-time gates so dense fights can't strobe or stutter
 var _crit_stop_ms := 0
+var _cues: Array = []
+var _sig_id := ""
+var _sig := 0               # signature number for the current character (0 = none)
+var _sig_budget := SIG_BUDGET_MAX
+var _honk_ms := 0
 var _pool_fill := 0.0            # particle-pool fill 0..1, refreshed every frame (drives load shedding)
 var _stat_shapes_alive := 0
 var _stat_shape_steals := 0
@@ -278,6 +310,157 @@ func bolt(points: PackedVector2Array, color: Color, life: float = 0.18, prio: in
 	s.width = 2.5
 
 
+## 4-point sparkle (crit pops, rare pickups, big kills). size = centre-to-tip px; pops then spins out.
+func star(pos: Vector2, size: float, color: Color, life: float = 0.2, rot: float = 0.0, prio: int = PRIO_NORMAL) -> void:
+	var s := _shape(prio)
+	if s == null:
+		return
+	s.kind = 4
+	s.pos = pos
+	s.r1 = size
+	s.dir = rot
+	s.life = life
+	s.max_life = life
+	s.color = color
+	s.flip = 1.0 if randf() < 0.5 else -1.0
+
+
+## Disc: width 0 = filled glow that swells r0 -> r1 and fades (impact flash / bloom); width > 0 = hollow
+## outline of that thickness (a clean "danger zone" marker). Convention: hollow = hostile, filled = friendly.
+func disc(pos: Vector2, r0: float, r1: float, life: float, color: Color, width: float = 0.0, prio: int = PRIO_NORMAL) -> void:
+	var s := _shape(prio)
+	if s == null:
+		return
+	s.kind = 5
+	s.pos = pos
+	s.r0 = r0
+	s.r1 = r1
+	s.life = life
+	s.max_life = life
+	s.color = color
+	s.width = width
+
+
+## Cone flash: filled sector with bright edges (melee cones, breath, hit cones). arc = full width in radians.
+func wedge(pos: Vector2, dir: float, arc: float, length: float, life: float, color: Color, prio: int = PRIO_NORMAL) -> void:
+	var s := _shape(prio)
+	if s == null:
+		return
+	s.kind = 6
+	s.pos = pos
+	s.dir = dir
+	s.arc = arc
+	s.r1 = length
+	s.life = life
+	s.max_life = life
+	s.color = color
+
+
+## Straight ray from pos along dir: white core + coloured glow, thinning as it fades
+## (lasers, boss death rays, teleport slashes - see beam_between).
+func beam(pos: Vector2, dir: float, length: float, width: float, life: float, color: Color, prio: int = PRIO_NORMAL) -> void:
+	var s := _shape(prio)
+	if s == null:
+		return
+	s.kind = 7
+	s.pos = pos
+	s.dir = dir
+	s.r1 = length
+	s.width = width
+	s.life = life
+	s.max_life = life
+	s.color = color
+
+
+func beam_between(a: Vector2, b: Vector2, width: float, life: float, color: Color, prio: int = PRIO_NORMAL) -> void:
+	beam(a, (b - a).angle(), a.distance_to(b), width, life, color, prio)
+
+
+# ------------------------------------------------------------------ persistent cues (telegraphs)
+## A cue is re-asserted every frame by whoever owns it; if they stop (attack fired, boss died) it
+## fades out within ~CUE_TTL. Costs no shape-pool slots. uid+slot identify a cue; charge is 0..1.
+func _cue(uid: int, slot: int) -> Cue:
+	var spare: Cue = null
+	for c in _cues:
+		if c.ttl > 0.0 and c.uid == uid and c.slot == slot:
+			return c
+		if spare == null and c.ttl <= 0.0:
+			spare = c
+	if spare == null:
+		if _cues.size() >= MAX_CUES:
+			return null
+		spare = Cue.new()
+		_cues.append(spare)
+	spare.uid = uid
+	spare.slot = slot
+	return spare
+
+
+## Aim wedge (cone of a fan / breath): fill and edges ramp up with charge, with a gentle (~3 Hz) pulse.
+func cue_wedge(uid: int, slot: int, pos: Vector2, dir: float, spread: float, length: float, color: Color, charge: float) -> void:
+	var c := _cue(uid, slot)
+	if c == null:
+		return
+	c.kind = 0
+	c.pos = pos
+	c.dir = dir
+	c.spread = spread
+	c.length = length
+	c.color = color
+	c.charge = charge
+	c.ttl = CUE_TTL
+
+
+## Ring collapsing from r_from to r_to as the attack nears (radial volleys, spiral casts).
+func cue_converge(uid: int, slot: int, pos: Vector2, r_from: float, r_to: float, color: Color, charge: float) -> void:
+	var c := _cue(uid, slot)
+	if c == null:
+		return
+	c.kind = 1
+	c.pos = pos
+	c.length = r_from
+	c.r_to = r_to
+	c.color = color
+	c.charge = charge
+	c.ttl = CUE_TTL
+
+
+## Rotating emitter marker: a bright beam at the head with a fading trail behind it. sweep_sign is the
+## rotation direction (+1 / -1), so the trail points back along the path already swept.
+func cue_sweep(uid: int, slot: int, pos: Vector2, dir: float, sweep_sign: float, length: float, color: Color) -> void:
+	var c := _cue(uid, slot)
+	if c == null:
+		return
+	c.kind = 2
+	c.pos = pos
+	c.dir = dir
+	c.flip = sweep_sign
+	c.length = length
+	c.color = color
+	c.charge = 1.0
+	c.ttl = CUE_TTL
+
+
+## Ground aura under a big enemy: soft glow disc + slowly pulsing ring. rate = pulse speed in rad/s.
+func cue_aura(uid: int, slot: int, pos: Vector2, radius: float, color: Color, rate: float) -> void:
+	var c := _cue(uid, slot)
+	if c == null:
+		return
+	c.kind = 3
+	c.pos = pos
+	c.length = radius
+	c.color = color
+	c.r_to = rate
+	c.charge = 1.0
+	c.ttl = CUE_TTL
+
+
+func clear_cues(uid: int) -> void:
+	for c in _cues:
+		if c.uid == uid:
+			c.ttl = 0.0
+
+
 ## Number-pool slot. A free slot always wins; when the pool is full, steal=true recycles the
 ## entry closest to expiring, steal=false returns null (the caller drops its number).
 func _num(steal: bool = false) -> Num:
@@ -336,6 +519,81 @@ func level_up_burst(pos: Vector2) -> void:
 		emit(pos, Vector2.from_angle(randf() * TAU) * randf_range(60.0, 260.0), randf_range(0.5, 0.9), randf_range(1.5, 3.0), Color.from_hsv(randf(), 0.5, 1.0), 0, 2.5, 90.0)
 
 
+# ------------------------------------------------------------------ character kill signatures
+func _sig_for(id: String) -> int:
+	var low := id.to_lower()
+	for i in SIG_KEYS.size():
+		if low.contains(String(SIG_KEYS[i])):
+			return i + 1
+	return 0
+
+
+## A small flourish on every kill, flavoured by the character being played (unknown ids get none).
+## Non-elite kills spend from a refilling budget and thin out under particle load; elites always play,
+## at double size. Everything is PRIO_AMBIENT / short-lived so it never competes with real cues.
+func signature_kill(pos: Vector2, elite: bool) -> void:
+	if world == null or world.player == null:
+		return
+	var id: String = String(world.player.def.id)
+	if id != _sig_id:
+		_sig_id = id
+		_sig = _sig_for(id)
+	if _sig == 0:
+		return
+	if not elite:
+		if _sig_budget < 1.0 or randf() > _shed_scale():
+			return
+		_sig_budget -= 1.0
+	var k: int = 2 if elite else 1
+	var kf := float(k)
+	match _sig:
+		1:  # Cowboy: brass ping + falling casings
+			star(pos, 8.0 * kf, Color(1.0, 0.85, 0.4), 0.14, 0.0, PRIO_AMBIENT)
+			for i in _shed_count(2 * k):
+				emit(pos, Vector2(randf_range(-50.0, 50.0), randf_range(-110.0, -60.0)), 0.5, 2.0, Color(0.95, 0.75, 0.3), 3, 2.0, 260.0, false)
+		2:  # Ninja: one clean diagonal cut through the corpse
+			var cut := randf_range(-0.9, 0.9) - PI * 0.25
+			beam(pos - Vector2.from_angle(cut) * 18.0 * kf, cut, 36.0 * kf, 2.2, 0.16, Color(0.8, 0.95, 1.0), PRIO_AMBIENT)
+		3:  # Pirate: spray arcing up and falling back, the odd gold glint
+			for i in _shed_count(4 * k):
+				emit(pos, Vector2.from_angle(randf_range(-2.8, -0.35)) * randf_range(60.0, 140.0), randf_range(0.35, 0.55), randf_range(1.5, 2.4), Color(0.65, 0.88, 1.0), 0, 2.5, 320.0, false)
+			if randf() < 0.3:
+				star(pos, 7.0 * kf, Color(1.0, 0.85, 0.35), 0.14, 0.0, PRIO_AMBIENT)
+		4:  # Paladin: a short pillar of light and rising motes
+			beam(pos, -PI * 0.5, 40.0 * kf, 3.0, 0.28, Color(1.0, 0.92, 0.6), PRIO_AMBIENT)
+			for i in _shed_count(2 * k):
+				emit(pos + Vector2(randf_range(-6.0, 6.0), 0.0), Vector2(0.0, -30.0), 0.55, 2.2, Color(1.0, 0.9, 0.55), 1, 2.0, -40.0)
+		5:  # Wizard: arcane ring and a tiny zig of lightning
+			ring(pos, 4.0, 22.0 * kf, 0.2, Color(0.6, 0.5, 1.0), 1.5, PRIO_AMBIENT)
+			var zig := PackedVector2Array([pos, pos + Vector2(randf_range(-10.0, 10.0), randf_range(-14.0, -6.0)) * kf, pos + Vector2(randf_range(-16.0, 16.0), randf_range(-26.0, -14.0)) * kf])
+			bolt(zig, Color(0.65, 0.6, 1.0), 0.12, PRIO_AMBIENT)
+		6:  # Spider: three web strands and venom drops
+			var web0 := randf() * TAU
+			for i in 3:
+				beam(pos, web0 + TAU * float(i) / 3.0, 18.0 * kf, 1.2, 0.3, Color(0.92, 0.95, 0.92), PRIO_AMBIENT)
+			for i in _shed_count(2 * k):
+				emit(pos, Vector2.from_angle(randf() * TAU) * randf_range(30.0, 80.0), 0.4, 2.0, Color(0.5, 1.0, 0.35), 0, 3.0, 180.0, false)
+		7:  # Minotaur: heavy ring, dust and a thump
+			ring(pos, 4.0, 34.0 * kf, 0.22, Color(0.85, 0.7, 0.5), 4.0, PRIO_AMBIENT)
+			dust(pos)
+			dust(pos)
+			Game.shake(0.8 * kf)
+		8:  # Harpy: drifting feathers
+			for i in _shed_count(4 * k):
+				emit(pos, Vector2.from_angle(randf() * TAU) * randf_range(30.0, 90.0), randf_range(0.6, 0.9), randf_range(2.0, 3.0), Color(0.9, 0.85, 0.75), 2, 1.5, 70.0, false)
+		9:  # Necromancer: souls lifting off the corpse
+			for i in _shed_count(2 * k):
+				emit(pos + Vector2(randf_range(-5.0, 5.0), 0.0), Vector2(randf_range(-14.0, 14.0), -40.0), 0.9, 4.0, Color(0.45, 1.0, 0.6, 0.85), 1, 1.2, -25.0)
+			ring(pos, 3.0, 16.0 * kf, 0.25, Color(0.4, 0.95, 0.55), 1.5, PRIO_AMBIENT)
+		10:  # Goose: feathers, and an occasional honk
+			for i in _shed_count(4 * k):
+				emit(pos, Vector2.from_angle(randf() * TAU) * randf_range(40.0, 100.0), randf_range(0.5, 0.8), randf_range(2.0, 3.0), Color(1, 1, 1), 2, 1.5, 90.0, false)
+			var now := Time.get_ticks_msec()
+			if now >= _honk_ms and randf() < 0.12:
+				_honk_ms = now + 1500
+				float_text(pos + Vector2(0, -10), "HONK!", Color(1.0, 0.95, 0.7), 16, 0.7, 14.0)
+
+
 # ------------------------------------------------------------------ impact feel tiers
 ## Each tier is one call from gameplay code and bundles shake + hit-stop + pulse. All three
 ## respect the Options sliders (via Game / World), and the cheap ones are rate-limited in real
@@ -346,7 +604,9 @@ func crit_feel(pos: Vector2, elite: bool) -> void:
 	var now := Time.get_ticks_msec()
 	if now >= _crit_fx_ms:
 		_crit_fx_ms = now + 90
-		ring(pos, 3.0, 30.0 if elite else 22.0, 0.16, Color(1.0, 0.88, 0.4), 2.0, PRIO_AMBIENT)
+		star(pos, 15.0 if elite else 11.0, Color(1.0, 0.92, 0.55), 0.2, randf() * 0.8, PRIO_AMBIENT)
+		if elite:
+			ring(pos, 3.0, 30.0, 0.16, Color(1.0, 0.88, 0.4), 2.0, PRIO_AMBIENT)
 		emit(pos, Vector2.ZERO, 0.07, 9.0, Color(1.0, 0.95, 0.7, 0.9), 1, 0.0)
 		Game.shake(1.2)
 	if now >= _crit_stop_ms:
@@ -359,6 +619,7 @@ func elite_kill_feel(pos: Vector2) -> void:
 	Game.hit_stop(0.07, 0.05)
 	Game.shake(5.0)
 	emit(pos, Vector2.ZERO, 0.22, 34.0, Color(1.0, 0.9, 0.7, 0.55), 1, 0.0)
+	star(pos, 28.0, Color(1.0, 0.9, 0.7), 0.3)
 	world.flash_screen(Color(1.0, 0.92, 0.75, 0.28), 2.5)
 
 
@@ -372,6 +633,10 @@ func boss_kill_feel(pos: Vector2) -> void:
 	ring(pos, 4.0, 130.0, 0.5, Color(1, 1, 1), 3.0, PRIO_IMPORTANT)
 	ring(pos, 2.0, 80.0, 0.35, Color(1.0, 0.6, 0.3), 2.0, PRIO_IMPORTANT)
 	emit(pos, Vector2.ZERO, 0.35, 60.0, Color(1.0, 0.95, 0.8, 0.6), 1, 0.0)
+	star(pos, 46.0, Color(1.0, 0.95, 0.8), 0.5, 0.0, PRIO_IMPORTANT)
+	var ray0 := randf() * TAU
+	for i in 10:
+		beam(pos, ray0 + TAU * float(i) / 10.0, randf_range(90.0, 210.0), randf_range(5.0, 9.0), randf_range(0.35, 0.6), Color(1.0, 0.85, 0.5), PRIO_IMPORTANT)
 	for i in 48:
 		emit(pos, Vector2.from_angle(randf() * TAU) * randf_range(60.0, 340.0), randf_range(0.5, 1.1), randf_range(1.5, 3.4), Color.from_hsv(randf_range(0.05, 0.14), 0.6, 1.0), 0, 2.5, 90.0)
 
@@ -408,6 +673,7 @@ func _process(delta: float) -> void:
 	if world == null:
 		return
 	delta = minf(delta, 1.0 / 30.0)
+	_sig_budget = minf(SIG_BUDGET_MAX, _sig_budget + delta * SIG_BUDGET_RATE)
 	var p_alive := 0
 	for p in _particles:
 		if p.life > 0.0:
@@ -423,6 +689,9 @@ func _process(delta: float) -> void:
 			s_alive += 1
 			s.life -= delta
 	_stat_shapes_alive = s_alive
+	for c in _cues:
+		if c.ttl > 0.0:
+			c.ttl -= delta
 	for n in _numbers:
 		if n.life > 0.0:
 			n.life -= delta
@@ -502,6 +771,107 @@ func draw_layer(canvas: Node2D, mode: int) -> void:
 				canvas.draw_polyline(s.pts, cb, s.width * (0.5 + a), false)
 				var cw := Color(1, 1, 1, a)
 				canvas.draw_polyline(s.pts, cw, 1.0, false)
+			4:
+				var pop: float = 1.0 - pow(1.0 - minf(1.0, t * 4.0), 2.0)
+				col.a *= a
+				_draw_star(canvas, s.pos, s.r1 * (0.3 + 0.7 * pop) * (1.0 - 0.4 * t), s.dir + s.flip * t * 0.9, col)
+			5:
+				var dr: float = lerpf(s.r0, s.r1, 1.0 - pow(1.0 - t, 2.0))
+				if s.width <= 0.0:
+					col.a *= a * 0.6
+					canvas.draw_circle(s.pos, dr, col)
+					canvas.draw_circle(s.pos, dr * 0.5, Color(1, 1, 1, col.a * 0.8))
+				else:
+					col.a *= a * 0.9
+					canvas.draw_arc(s.pos, dr, 0.0, TAU, 40, col, maxf(1.0, s.width * (0.4 + 0.6 * a)))
+			6:
+				var wl: float = s.r1 * (0.6 + 0.4 * minf(1.0, t * 4.0))
+				_draw_wedge(canvas, s.pos, s.dir, s.arc, wl, col, 0.3 * a, 0.9 * a)
+			7:
+				_draw_beam(canvas, s.pos, s.pos + Vector2.from_angle(s.dir) * s.r1, s.width * (0.35 + 0.65 * a), col, a)
+	if additive:
+		for c in _cues:
+			if c.ttl > 0.0:
+				_draw_cue(canvas, c)
+
+
+# ------------------------------------------------------------------ shared draw helpers
+func _draw_star(canvas: Node2D, pos: Vector2, size: float, rot: float, col: Color) -> void:
+	# two long crossed diamonds (the 4 tips), two short diagonal ones, and a hot centre
+	for k in 2:
+		var ax := Vector2.from_angle(rot + PI * 0.5 * float(k))
+		var pr := ax.orthogonal()
+		canvas.draw_colored_polygon(PackedVector2Array([pos + ax * size, pos + pr * size * 0.16, pos - ax * size, pos - pr * size * 0.16]), col)
+	var dc := col
+	dc.a *= 0.55
+	for k in 2:
+		var dx := Vector2.from_angle(rot + PI * 0.25 + PI * 0.5 * float(k))
+		var dp := dx.orthogonal()
+		canvas.draw_colored_polygon(PackedVector2Array([pos + dx * size * 0.5, pos + dp * size * 0.1, pos - dx * size * 0.5, pos - dp * size * 0.1]), dc)
+	canvas.draw_circle(pos, maxf(1.0, size * 0.2), Color(1, 1, 1, col.a))
+
+
+## Filled sector (apex at pos) with bright edges. fill_a / edge_a multiply col.a.
+func _draw_wedge(canvas: Node2D, pos: Vector2, dir: float, arc: float, length: float, col: Color, fill_a: float, edge_a: float) -> void:
+	arc = clampf(arc, 0.02, TAU - 0.2)
+	var seg := 14
+	var pts := PackedVector2Array()
+	pts.append(pos)
+	for i in seg + 1:
+		pts.append(pos + Vector2.from_angle(dir - arc * 0.5 + arc * float(i) / float(seg)) * length)
+	var fc := col
+	fc.a = col.a * fill_a
+	if fc.a > 0.0:
+		canvas.draw_colored_polygon(pts, fc)
+	var ec := col
+	ec.a = col.a * edge_a
+	if ec.a > 0.0:
+		canvas.draw_line(pos, pts[1], ec, 1.5)
+		canvas.draw_line(pos, pts[seg + 1], ec, 1.5)
+		canvas.draw_polyline(pts.slice(1), ec, 1.5)
+
+
+## Three stacked strokes: wide soft glow, mid colour, thin white core. a01 multiplies the alpha.
+func _draw_beam(canvas: Node2D, from: Vector2, to: Vector2, width: float, col: Color, a01: float) -> void:
+	var g := col
+	g.a = col.a * a01 * 0.25
+	canvas.draw_line(from, to, g, width * 3.0)
+	var m := col
+	m.a = col.a * a01 * 0.6
+	canvas.draw_line(from, to, m, width * 1.6)
+	canvas.draw_line(from, to, Color(1, 1, 1, col.a * a01 * 0.9), maxf(1.0, width * 0.5))
+
+
+func _draw_cue(canvas: Node2D, c: Cue) -> void:
+	var fade: float = clampf(c.ttl / CUE_FADE, 0.0, 1.0)
+	var ch: float = c.charge
+	match c.kind:
+		0:
+			var pulse: float = 0.85 + 0.15 * sin(ch * 9.0)
+			_draw_wedge(canvas, c.pos, c.dir, c.spread, c.length * (0.55 + 0.45 * ch), c.color, (0.08 + 0.22 * ch) * pulse * fade, (0.35 + 0.6 * ch) * fade)
+		1:
+			var rad: float = lerpf(c.length, c.r_to, ch * ch)
+			var rc: Color = c.color
+			rc.a = (0.25 + 0.7 * ch) * fade
+			canvas.draw_arc(c.pos, rad, 0.0, TAU, 48, rc, 1.5 + 2.5 * ch)
+			var tc: Color = c.color
+			tc.a = (0.15 + 0.35 * ch) * fade
+			canvas.draw_arc(c.pos, c.r_to, 0.0, TAU, 32, tc, 1.0)
+		2:
+			var tail := 0.6
+			var slices := 5
+			for k in slices:
+				var sd: float = c.dir - c.flip * tail * (float(k) + 0.5) / float(slices)
+				_draw_wedge(canvas, c.pos, sd, tail / float(slices) * 1.05, c.length, c.color, 0.3 * (1.0 - float(k) / float(slices)) * fade, 0.0)
+			_draw_beam(canvas, c.pos, c.pos + Vector2.from_angle(c.dir) * c.length, 2.5, c.color, fade)
+		3:
+			var ph: float = sin(Time.get_ticks_msec() * 0.001 * c.r_to)
+			var ar: float = c.length * (1.0 + 0.06 * ph)
+			var ac: Color = c.color
+			ac.a = (0.07 + 0.03 * ph) * fade
+			canvas.draw_circle(c.pos, ar, ac)
+			ac.a = (0.35 + 0.15 * ph) * fade
+			canvas.draw_arc(c.pos, ar, 0.0, TAU, 40, ac, 1.5)
 
 
 func _draw_motes(canvas: Node2D) -> void:
