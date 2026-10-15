@@ -603,7 +603,7 @@ func _ring_volley(e: E, d, dir: Vector2, enraged: bool) -> void:
         var v: Vector2 = Vector2.from_angle(phase + TAU * float(i) / float(n)) * d.shoot_speed
         world.projectiles.spawn_hostile(e.pos + Vector2(0, -12), v, d.shoot_damage, d.can_hit_flying)
     _aimed_fan(e, d, dir)
-    world.fx.ring(e.pos, 10.0, 110.0, 0.35, Color(0.85, 0.95, 0.75), 3.0)
+    world.fx.ring(e.pos, 10.0, 110.0, 0.35, Color(0.85, 0.95, 0.75), 3.0, FxManager.PRIO_IMPORTANT)
     Audio.sfx("hand_cannon", -6.0, 0.6, 0.0)
     Game.shake(2.5)
 
@@ -630,7 +630,7 @@ func _spiral_start(e: E, d) -> void:
         e.spiral_sign = -e.spiral_sign
     else:
         e.spiral_sign = 1.0
-    world.fx.ring(e.pos, 10.0, 130.0, 0.4, Color(1.0, 0.5, 0.15), 3.0)
+    world.fx.ring(e.pos, 10.0, 130.0, 0.4, Color(1.0, 0.5, 0.15), 3.0, FxManager.PRIO_IMPORTANT)
     Audio.sfx("elite_enemy_spawn", -4.0, 0.7, 0.0)
     Game.shake(2.0)
 

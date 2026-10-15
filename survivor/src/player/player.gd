@@ -394,7 +394,7 @@ func take_damage(amount: float, hits_air: bool = false, _source: String = "") ->
 func _knock_from_flight() -> void:
 	flying = false
 	grounded_t = float(def.flags.get("knockdown_seconds", 5.0))
-	world.fx.ring(global_position, 4.0, 46.0, 0.35, Color(1.0, 0.6, 0.4), 3.0)
+	world.fx.ring(global_position, 4.0, 46.0, 0.35, Color(1.0, 0.6, 0.4), 3.0, FxManager.PRIO_IMPORTANT)
 	world.announce("KNOCKED FROM FLIGHT", true)
 
 

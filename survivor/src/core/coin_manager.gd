@@ -25,6 +25,7 @@ class C:
     var spawn_t := 0.0
 
 var world
+var _seal_tex: Texture2D
 var live: Array[C] = []
 var _free: Array[C] = []
 var _had_live := false        # tracks redraw state so empty frames skip queue_redraw
@@ -33,6 +34,7 @@ var _had_live := false        # tracks redraw state so empty frames skip queue_r
 func setup(world_ref) -> void:
     world = world_ref
     z_index = -1
+    _seal_tex = DB.texture(CoinIcon.STRIP)
     for i in MAX:
         _free.append(C.new())
 
@@ -200,7 +202,14 @@ func _draw() -> void:
         if c.value >= 2:
             draw_circle(p, r * 2.0, Color(ess.r, ess.g, ess.b, 0.14))
         draw_set_transform(p, 0.0, Vector2(turn, 1.0))
-        draw_circle(Vector2.ZERO, r, ess.darkened(0.4))
-        draw_circle(Vector2.ZERO, r * 0.78, ess)
-        draw_circle(Vector2(-r * 0.22, -r * 0.22), r * 0.3, ess.lightened(0.55))
+        if _seal_tex != null:
+            # Seal strip, static frame 0 in-world (animated only in UI CoinIcon).
+            var cw: float = _seal_tex.get_size().x / float(CoinIcon.FRAMES)
+            var ch: float = _seal_tex.get_size().y
+            var hh: float = r * ch / cw
+            draw_texture_rect_region(_seal_tex, Rect2(Vector2(-r, -hh), Vector2(r * 2.0, hh * 2.0)), Rect2(Vector2.ZERO, Vector2(cw, ch)), ess)
+        else:
+            draw_circle(Vector2.ZERO, r, ess.darkened(0.4))
+            draw_circle(Vector2.ZERO, r * 0.78, ess)
+            draw_circle(Vector2(-r * 0.22, -r * 0.22), r * 0.3, ess.lightened(0.55))
         draw_set_transform(Vector2.ZERO, 0.0, Vector2.ONE)

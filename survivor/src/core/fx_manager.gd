@@ -9,6 +9,17 @@ const MAX_PARTICLES := 640
 const MAX_SHAPES := 96
 const MAX_NUMBERS := 60
 
+# Shape priorities. When the shape pool is full, a new shape evicts the lowest-priority,
+# soonest-to-expire shape that is not MORE important than itself; if none qualifies the new
+# (less important) shape is dropped instead. Callers that pass no priority get PRIO_NORMAL.
+const PRIO_AMBIENT := 0      # cosmetic spam (crit pops)
+const PRIO_NORMAL := 1       # default: weapon visuals, death rings
+const PRIO_IMPORTANT := 2    # boss attack cues, player-state feedback, boss death
+
+# Cosmetic load shedding: above this particle-pool fill, sparks / muzzle flashes / dust thin out
+# (down to 25% of their normal count at a full pool). Telegraphs, bursts and feel tiers are never shed.
+const SHED_START := 0.6
+
 class P:
 	var pos := Vector2.ZERO
 	var vel := Vector2.ZERO
@@ -34,6 +45,7 @@ class Shape:
 	var color := Color.WHITE
 	var pts := PackedVector2Array()
 	var flip := 1.0
+	var prio := 1            # PRIO_* - decides who gets evicted when the pool is full
 
 class Num:
 	var pos := Vector2.ZERO
@@ -59,6 +71,10 @@ var _strikes: Array = []
 var _font: Font
 var _crit_fx_ms := 0        # real-time gates so dense fights can't strobe or stutter
 var _crit_stop_ms := 0
+var _pool_fill := 0.0            # particle-pool fill 0..1, refreshed every frame (drives load shedding)
+var _stat_shapes_alive := 0
+var _stat_shape_steals := 0
+var _stat_shape_drops := 0
 
 
 func setup(world_ref) -> void:
@@ -128,20 +144,59 @@ func emit(pos: Vector2, vel: Vector2, life: float, size: float, color: Color, ki
 	p.add = add
 
 
-func _shape() -> Shape:
+## Shape-pool slot for a new shape of the given priority. Free slot first; otherwise evict the
+## lowest-priority shape (ties: the one closest to expiring) that isn't more important than the
+## request. Returns null when the pool is full of more important shapes - the caller drops its shape.
+func _shape(prio: int = PRIO_NORMAL) -> Shape:
 	if _shapes.size() < MAX_SHAPES:
-		var s := Shape.new()
-		_shapes.append(s)
-		return s
+		var fresh := Shape.new()
+		fresh.prio = prio
+		_shapes.append(fresh)
+		return fresh
+	var victim: Shape = null
 	for s in _shapes:
 		if s.life <= 0.0:
-			return s
-	return _shapes[0]
+			victim = s
+			break
+		if s.prio > prio:
+			continue
+		if victim == null or s.prio < victim.prio or (s.prio == victim.prio and s.life < victim.life):
+			victim = s
+	if victim == null:
+		_stat_shape_drops += 1
+		return null
+	if victim.life > 0.0:
+		_stat_shape_steals += 1
+	victim.prio = prio
+	return victim
+
+
+## 1.0 until the particle pool passes SHED_START, then ramps down to 0.25 at a full pool.
+func _shed_scale() -> float:
+	if _pool_fill <= SHED_START:
+		return 1.0
+	return lerpf(1.0, 0.25, (_pool_fill - SHED_START) / (1.0 - SHED_START))
+
+
+func _shed_count(n: int) -> int:
+	if _pool_fill <= SHED_START:
+		return n
+	return maxi(1, roundi(float(n) * _shed_scale()))
+
+
+## Live pool numbers for the dev overlay / profiling: particles, shapes, load, evictions, drops.
+func debug_stats() -> Dictionary:
+	return {
+		"particle_load": _pool_fill,
+		"shapes_alive": _stat_shapes_alive,
+		"shape_steals": _stat_shape_steals,
+		"shape_drops": _stat_shape_drops,
+	}
 
 
 func hit_sparks(pos: Vector2, dir: Vector2, color: Color, count: int = 4) -> void:
 	var base := dir.angle() if dir.length() > 0.1 else randf() * TAU
-	for i in count:
+	for i in _shed_count(count):
 		var a := base + randf_range(-0.9, 0.9)
 		emit(pos, Vector2.from_angle(a) * randf_range(70.0, 190.0), randf_range(0.16, 0.3), randf_range(1.5, 2.6), color, 2, 5.0)
 	emit(pos, Vector2.ZERO, 0.08, 6.0, Color(1, 1, 1, 0.9), 1, 0.0)
@@ -160,14 +215,16 @@ func death_burst(pos: Vector2, def, elite: bool) -> void:
 func muzzle(pos: Vector2, dir: Vector2, color: Color) -> void:
 	var a := dir.angle()
 	emit(pos + dir * 6.0, Vector2.ZERO, 0.06, 8.0, Color(1, 0.95, 0.7, 0.9), 1, 0.0)
-	for i in 5:
+	for i in _shed_count(5):
 		emit(pos + dir * 6.0, Vector2.from_angle(a + randf_range(-0.35, 0.35)) * randf_range(120.0, 260.0), randf_range(0.06, 0.12), 2.0, color, 2, 6.0)
 	# ejected casing
 	emit(pos, Vector2.from_angle(a + PI * 0.5 * signf(randf() - 0.5)) * randf_range(40.0, 80.0) + Vector2(0, -40), 0.55, 2.0, Color(0.95, 0.75, 0.3), 3, 2.0, 260.0, false)
 
 
-func ring(pos: Vector2, r0: float, r1: float, life: float, color: Color, width: float = 2.0) -> void:
-	var s := _shape()
+func ring(pos: Vector2, r0: float, r1: float, life: float, color: Color, width: float = 2.0, prio: int = PRIO_NORMAL) -> void:
+	var s := _shape(prio)
+	if s == null:
+		return
 	s.kind = 0
 	s.pos = pos
 	s.r0 = r0
@@ -178,8 +235,10 @@ func ring(pos: Vector2, r0: float, r1: float, life: float, color: Color, width: 
 	s.width = width
 
 
-func slash_arc(pos: Vector2, dir: float, radius: float, arc: float, color: Color, flip: float = 1.0, life: float = 0.16) -> void:
-	var s := _shape()
+func slash_arc(pos: Vector2, dir: float, radius: float, arc: float, color: Color, flip: float = 1.0, life: float = 0.16, prio: int = PRIO_NORMAL) -> void:
+	var s := _shape(prio)
+	if s == null:
+		return
 	s.kind = 1
 	s.pos = pos
 	s.dir = dir
@@ -192,8 +251,10 @@ func slash_arc(pos: Vector2, dir: float, radius: float, arc: float, color: Color
 	s.width = maxf(3.0, radius * 0.11)
 
 
-func lash(pos: Vector2, dir: float, length: float, color: Color) -> void:
-	var s := _shape()
+func lash(pos: Vector2, dir: float, length: float, color: Color, prio: int = PRIO_NORMAL) -> void:
+	var s := _shape(prio)
+	if s == null:
+		return
 	s.kind = 2
 	s.pos = pos
 	s.dir = dir
@@ -205,8 +266,10 @@ func lash(pos: Vector2, dir: float, length: float, color: Color) -> void:
 	s.flip = 1.0 if randf() < 0.5 else -1.0
 
 
-func bolt(points: PackedVector2Array, color: Color, life: float = 0.18) -> void:
-	var s := _shape()
+func bolt(points: PackedVector2Array, color: Color, life: float = 0.18, prio: int = PRIO_NORMAL) -> void:
+	var s := _shape(prio)
+	if s == null:
+		return
 	s.kind = 3
 	s.pts = points
 	s.life = life
@@ -283,7 +346,7 @@ func crit_feel(pos: Vector2, elite: bool) -> void:
 	var now := Time.get_ticks_msec()
 	if now >= _crit_fx_ms:
 		_crit_fx_ms = now + 90
-		ring(pos, 3.0, 30.0 if elite else 22.0, 0.16, Color(1.0, 0.88, 0.4), 2.0)
+		ring(pos, 3.0, 30.0 if elite else 22.0, 0.16, Color(1.0, 0.88, 0.4), 2.0, PRIO_AMBIENT)
 		emit(pos, Vector2.ZERO, 0.07, 9.0, Color(1.0, 0.95, 0.7, 0.9), 1, 0.0)
 		Game.shake(1.2)
 	if now >= _crit_stop_ms:
@@ -305,9 +368,9 @@ func boss_kill_feel(pos: Vector2) -> void:
 	Game.hit_stop(0.16, 0.03)
 	Game.shake(9.0)
 	world.flash_screen(Color(1, 1, 1, 0.45), 1.6)
-	ring(pos, 6.0, 190.0, 0.7, Color(1.0, 0.85, 0.5), 5.0)
-	ring(pos, 4.0, 130.0, 0.5, Color(1, 1, 1), 3.0)
-	ring(pos, 2.0, 80.0, 0.35, Color(1.0, 0.6, 0.3), 2.0)
+	ring(pos, 6.0, 190.0, 0.7, Color(1.0, 0.85, 0.5), 5.0, PRIO_IMPORTANT)
+	ring(pos, 4.0, 130.0, 0.5, Color(1, 1, 1), 3.0, PRIO_IMPORTANT)
+	ring(pos, 2.0, 80.0, 0.35, Color(1.0, 0.6, 0.3), 2.0, PRIO_IMPORTANT)
 	emit(pos, Vector2.ZERO, 0.35, 60.0, Color(1.0, 0.95, 0.8, 0.6), 1, 0.0)
 	for i in 48:
 		emit(pos, Vector2.from_angle(randf() * TAU) * randf_range(60.0, 340.0), randf_range(0.5, 1.1), randf_range(1.5, 3.4), Color.from_hsv(randf_range(0.05, 0.14), 0.6, 1.0), 0, 2.5, 90.0)
@@ -316,7 +379,7 @@ func boss_kill_feel(pos: Vector2) -> void:
 ## Boss crossed its enrage threshold: callout, red shockwave, kick, red pulse.
 func enrage_feel(pos: Vector2) -> void:
 	float_text(pos + Vector2(0, -34), "ENRAGED!", Color(1.0, 0.35, 0.25), 26, 1.6, 22.0, 0.5, true)
-	ring(pos, 8.0, 140.0, 0.5, Color(1.0, 0.3, 0.2), 4.0)
+	ring(pos, 8.0, 140.0, 0.5, Color(1.0, 0.3, 0.2), 4.0, PRIO_IMPORTANT)
 	Game.shake(5.0)
 	world.flash_screen(Color(1.0, 0.15, 0.1, 0.22), 2.5)
 
@@ -335,6 +398,8 @@ func strike(pos: Vector2, size_scale: float = 0.9) -> void:
 
 
 func dust(pos: Vector2) -> void:
+	if _pool_fill > SHED_START and randf() > _shed_scale():
+		return
 	emit(pos, Vector2(randf_range(-14, 14), randf_range(-12, -4)), 0.4, randf_range(1.5, 2.5), Color(0.55, 0.5, 0.42, 0.55), 0, 3.0, 0.0, false)
 
 
@@ -343,15 +408,21 @@ func _process(delta: float) -> void:
 	if world == null:
 		return
 	delta = minf(delta, 1.0 / 30.0)
+	var p_alive := 0
 	for p in _particles:
 		if p.life > 0.0:
+			p_alive += 1
 			p.life -= delta
 			p.vel += Vector2(0, p.grav) * delta
 			p.vel *= exp(-p.drag * delta)
 			p.pos += p.vel * delta
+	_pool_fill = float(p_alive) / float(MAX_PARTICLES)
+	var s_alive := 0
 	for s in _shapes:
 		if s.life > 0.0:
+			s_alive += 1
 			s.life -= delta
+	_stat_shapes_alive = s_alive
 	for n in _numbers:
 		if n.life > 0.0:
 			n.life -= delta

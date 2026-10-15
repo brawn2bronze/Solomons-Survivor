@@ -190,7 +190,8 @@ func _process(_delta: float) -> void:
 		flags += " NL"
 	if world.enemies.director_paused:
 		flags += " PAUSED"
-	_perf.text = "%d FPS  enemies %d/%d  proj %d  gems %d  t %ds  rate x%.2f%s" % [Engine.get_frames_per_second(), world.enemies.alive_count(), EnemyManager.MAX_POOL, world.projectiles.live.size(), world.gems.live.size(), int(world.run_time), world.dev_time_rate, flags]
+	var fx: Dictionary = world.fx.debug_stats()
+	_perf.text = "%d FPS  enemies %d/%d  proj %d  gems %d  t %ds  rate x%.2f%s\nfx %.0f%% sh %d ev %d/%d" % [Engine.get_frames_per_second(), world.enemies.alive_count(), EnemyManager.MAX_POOL, world.projectiles.live.size(), world.gems.live.size(), int(world.run_time), world.dev_time_rate, flags, float(fx["particle_load"]) * 100.0, int(fx["shapes_alive"]), int(fx["shape_steals"]), int(fx["shape_drops"])]
 
 
 ## Cap the scroll area to the viewport so the panel can never overflow
