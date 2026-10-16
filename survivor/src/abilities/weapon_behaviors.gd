@@ -181,7 +181,7 @@ class MeleeSwipe extends Ability:
         var col: Color = def.color
         for e in hits:
             world().enemies.damage(e, dmg(), e.pos - origin, float(p["knockback"]), col)
-        world().fx.slash_arc(origin, d.angle(), r, arc, col, flip, 0.18 if def.id == "katana" else 0.24)
+        world().fx.slash_arc(origin, d.angle(), r, arc, col, flip, 0.18 if def.id == "katana" else 0.24, FxManager.PRIO_NORMAL, AbilityArt.weapon_arc_skin(def))
         world().fx.attack_flourish(origin, d)
         for i in 6:
             world().fx.emit(origin + d * r * 0.8, Vector2.from_angle(d.angle() + flip * randf_range(0.2, 1.4)) * randf_range(60.0, 140.0), 0.15, 2.0, col, 2, 5.0)

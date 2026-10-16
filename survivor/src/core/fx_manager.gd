@@ -259,12 +259,16 @@ func death_burst(pos: Vector2, def, elite: bool) -> void:
 
 ## Muzzle flash. With a weapon skin (FX lab muzzle_fx_*), the strip plays at the
 ## muzzle instead of the procedural flash + streaks; the ejected casing always
-## stays. Empty/fallback skin = today's procedural look.
+## stays. The stamp rotates to the aim angle (mirrored for leftward shots) and
+## takes the muzzle_fx_fwd/up calibration nudge in aim space. Empty/fallback
+## skin = today's procedural look.
 func muzzle(pos: Vector2, dir: Vector2, color: Color, skin: Dictionary = {}) -> void:
 	var a := dir.angle()
 	if not skin.is_empty() and not bool(skin.get("fallback", true)):
 		var mfx: Dictionary = skin.duplicate()
-		mfx["offset"] = dir * 6.0
+		mfx["offset"] = dir * (6.0 + float(skin.get("fwd", 0.0))) + Vector2(dir.y, -dir.x) * float(skin.get("up", 0.0))
+		mfx["rotation"] = a
+		mfx["flip_h"] = dir.x < 0.0
 		kill_sprite(pos, 1.0, mfx)
 		emit(pos, Vector2.from_angle(a + PI * 0.5 * signf(randf() - 0.5)) * randf_range(40.0, 80.0) + Vector2(0, -40), 0.55, 2.0, Color(0.95, 0.75, 0.3), 3, 2.0, 260.0, false)
 		return
@@ -289,7 +293,25 @@ func ring(pos: Vector2, r0: float, r1: float, life: float, color: Color, width: 
 	s.width = width
 
 
-func slash_arc(pos: Vector2, dir: float, radius: float, arc: float, color: Color, flip: float = 1.0, life: float = 0.16, prio: int = PRIO_NORMAL) -> void:
+## Slash arc. With a weapon skin (FX lab arc_fx_*), a strip stamp fitted to the
+## swing (mid-arc position, swing-angle rotation, radius scale) replaces the
+## three procedural bands; spark emits from the caller stay. Empty skin =
+## today's procedural look.
+func slash_arc(pos: Vector2, dir: float, radius: float, arc: float, color: Color, flip: float = 1.0, life: float = 0.16, prio: int = PRIO_NORMAL, skin: Dictionary = {}) -> void:
+	if not skin.is_empty() and not bool(skin.get("fallback", true)):
+		var atex: Texture2D = DB.texture(String(skin.get("path", "")))
+		if atex != null:
+			var aframes := maxi(1, int(skin.get("frames", 1)))
+			var cell := maxf(1.0, float(atex.get_width()) / float(aframes))
+			var afx: Dictionary = skin.duplicate()
+			afx["offset"] = Vector2.from_angle(dir) * radius * 0.55
+			afx["rotation"] = dir
+			afx["flip_h"] = flip < 0.0
+			afx["scale"] = maxf(0.1, float(skin.get("scale", 1.0))) * radius / cell
+			afx["life"] = life
+			afx["loops"] = 1
+			kill_sprite(pos, 1.0, afx)
+			return
 	var s := _shape(prio)
 	if s == null:
 		return
@@ -712,6 +734,8 @@ func kill_sprite(pos: Vector2, kf: float, fx: Dictionary) -> void:
 			sp.vframes = 1
 			sp.frame = 0
 			sp.position = pos + off
+			sp.rotation = float(fx.get("rotation", 0.0))
+			sp.flip_h = bool(fx.get("flip_h", false))
 			sp.scale = Vector2(sc, sc)
 			sp.modulate = tint
 			sp.modulate.a = 1.0

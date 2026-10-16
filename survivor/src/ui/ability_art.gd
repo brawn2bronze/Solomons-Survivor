@@ -98,10 +98,25 @@ static func weapon_muzzle_skin(wdef) -> Dictionary:
     return _weapon_fx(wdef, "muzzle_fx", 0.12)
 
 
+## Melee arc skin for a weapon def. Empty arc_fx_sprite = procedural fallback
+## (the three slash-arc bands). Stamp geometry (offset/rotation/scale/life)
+## is fitted to the swing by fx.slash_arc; "life"/"loops" unused here.
+static func weapon_arc_skin(wdef) -> Dictionary:
+    return _weapon_fx(wdef, "arc_fx", 0.2)
+
+
 static func _weapon_fx(wdef, prefix: String, default_life: float) -> Dictionary:
     if wdef == null:
-        return {"path": "", "frames": 1, "fps": 8.0, "life": default_life, "scale": 1.0, "offset": Vector2.ZERO, "tint": Color.WHITE, "loops": 1, "fallback": true}
+        return {"path": "", "frames": 1, "fps": 8.0, "life": default_life, "scale": 1.0, "offset": Vector2.ZERO, "fwd": 0.0, "up": 0.0, "trail": true, "tint": Color.WHITE, "loops": 1, "fallback": true}
     var path: String = String(wdef.get(prefix + "_sprite"))
+    var fwd := 0.0
+    var up := 0.0
+    var trail := true
+    if prefix == "proj_fx" or prefix == "muzzle_fx":
+        fwd = float(wdef.get(prefix + "_fwd"))
+        up = float(wdef.get(prefix + "_up"))
+    if prefix == "proj_fx":
+        trail = bool(wdef.get("proj_fx_trail"))
     return {
         "path": path,
         "frames": maxi(1, int(wdef.get(prefix + "_frames"))),
@@ -109,6 +124,9 @@ static func _weapon_fx(wdef, prefix: String, default_life: float) -> Dictionary:
         "life": maxf(0.05, float(wdef.get(prefix + "_life")) if prefix == "muzzle_fx" else default_life),
         "scale": maxf(0.1, float(wdef.get(prefix + "_scale"))),
         "offset": Vector2.ZERO,
+        "fwd": fwd,
+        "up": up,
+        "trail": trail,
         "tint": Color.WHITE,
         "loops": 1,
         "fallback": path == "",

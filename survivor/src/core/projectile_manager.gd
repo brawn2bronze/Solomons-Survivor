@@ -229,7 +229,11 @@ func _draw_skin(p: Pr, sk: Dictionary) -> bool:
     var ch: float = tex.get_size().y
     var fr: int = int(p.age * fps) % frames
     var fade: float = clampf(minf(p.life * 2.0, p.age * 4.0), 0.0, 1.0)
-    draw_set_transform(p.pos, p.vel.angle(), Vector2(sc, sc))
+    # Calibration nudge in travel space (px, pre-scale): fwd along velocity,
+    # up screen-up of velocity. Keeps art centered on truth (p.pos = hitbox).
+    var dir: Vector2 = p.vel.normalized()
+    var org: Vector2 = p.pos + dir * float(sk.get("fwd", 0.0)) + Vector2(dir.y, -dir.x) * float(sk.get("up", 0.0))
+    draw_set_transform(org, p.vel.angle(), Vector2(sc, sc))
     draw_texture_rect_region(tex, Rect2(Vector2(-cw, -ch) * 0.5, Vector2(cw, ch)), Rect2(fr * cw, 0, cw, ch), Color(1, 1, 1, fade))
     draw_set_transform(Vector2.ZERO, 0.0, Vector2.ONE)
     return true
@@ -248,13 +252,14 @@ func _draw() -> void:
             Kind.SHURIKEN: tw = 1.5
             Kind.SKULL: tw = p.radius * 0.9
             Kind.HOSTILE: tw = 4.0
-        if p.kind != Kind.WAVE and p.kind != Kind.HOLY:
+        var sk: Dictionary = p.skin if p.skin is Dictionary else {}
+        var hide_trail: bool = not sk.is_empty() and not bool(sk.get("fallback", true)) and not bool(sk.get("trail", true))
+        if p.kind != Kind.WAVE and p.kind != Kind.HOLY and not hide_trail:
             for k in range(n - 1):
                 var f := float(k + 1) / float(n)
                 var tc := c
                 tc.a = f * f * 0.75
                 draw_line(p.trail[k], p.trail[k + 1], tc, maxf(1.0, tw * f))
-        var sk: Dictionary = p.skin if p.skin is Dictionary else {}
         match p.kind:
             Kind.BULLET:
                 if not _draw_skin(p, sk):

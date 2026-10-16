@@ -6,9 +6,9 @@ extends Node
 ## to the live def. Kill buttons preview the published kill FX; Attack fires
 ## the real weapon at the training dummy, showing published weapon skins live.
 ## Kill dummy runs the full death FX quietly (no drops/bestiary).
-## Targets: Kill signature -> character .tres; Projectile / Muzzle-flash skins
-## -> weapon .tres (resolved from the character's weapon). Trails, casings,
-## melee arcs, beams, rings, decals and passives (e.g. whip lash) are
+## Targets: Kill signature -> character .tres; Projectile / Muzzle-flash / Arc
+## skins -> weapon .tres (resolved from the character's weapon). Trails,
+## casings, sparks, beams, rings, decals and passives (e.g. whip lash) are
 ## procedural and untouched by this lab.
 ## Scaling: new characters appear in the picker automatically (DB scans
 ## data/characters/). New effects need one EFFECTS entry + their resolver;
@@ -16,7 +16,7 @@ extends Node
 
 ## Effect registry. One entry per publishable effect: picker label, .tres field
 ## names in write order, control roles parallel to fields, value kinds parallel
-## to fields ("path", "int", "float"). Controls live in _controls by role, so a
+## to fields ("path", "int", "float", "bool"). Controls live in _controls by role, so a
 ## new effect reuses the same path box + spinners when its roles match.
 const EFFECTS := {
 	"kill": {
@@ -29,23 +29,31 @@ const EFFECTS := {
 	"proj": {
 		"label": "Projectile skin",
 		"target": "weapon",
-		"fields": ["proj_fx_sprite", "proj_fx_frames", "proj_fx_fps", "proj_fx_scale"],
-		"roles": ["path", "frames", "fps", "scale"],
-		"kinds": ["path", "int", "float", "float"],
+		"fields": ["proj_fx_sprite", "proj_fx_frames", "proj_fx_fps", "proj_fx_scale", "proj_fx_fwd", "proj_fx_up", "proj_fx_trail"],
+		"roles": ["path", "frames", "fps", "scale", "fwd", "up", "trail"],
+		"kinds": ["path", "int", "float", "float", "float", "float", "bool"],
 	},
 	"muzzle": {
 		"label": "Muzzle-flash skin",
 		"target": "weapon",
-		"fields": ["muzzle_fx_sprite", "muzzle_fx_frames", "muzzle_fx_fps", "muzzle_fx_scale", "muzzle_fx_life"],
-		"roles": ["path", "frames", "fps", "scale", "life"],
-		"kinds": ["path", "int", "float", "float", "float"],
+		"fields": ["muzzle_fx_sprite", "muzzle_fx_frames", "muzzle_fx_fps", "muzzle_fx_scale", "muzzle_fx_life", "muzzle_fx_fwd", "muzzle_fx_up"],
+		"roles": ["path", "frames", "fps", "scale", "life", "fwd", "up"],
+		"kinds": ["path", "int", "float", "float", "float", "float", "float"],
+	},
+	"arc": {
+		"label": "Arc slash skin",
+		"target": "weapon",
+		"fields": ["arc_fx_sprite", "arc_fx_frames", "arc_fx_fps", "arc_fx_scale"],
+		"roles": ["path", "frames", "fps", "scale"],
+		"kinds": ["path", "int", "float", "float"],
 	},
 }
 const EFFECT_ORDER := ["kill", "proj", "muzzle"]
-## Weapon behaviors that fire skinnable projectiles / muzzle flashes. Melee,
-## beam, dash, ring and zone weapons offer Kill only (arc skins = Phase 2).
+## Weapon behaviors that fire skinnable projectiles / muzzle flashes / slash
+## arcs. Bite, beam, dash, ring and zone weapons still offer Kill only.
 const PROJ_BEHAVIORS := ["revolver", "cannon", "skull", "wave"]
 const MUZZLE_BEHAVIORS := ["revolver", "cannon"]
+const ARC_BEHAVIORS := ["melee_swipe"]
 
 var _world: World
 var _status: Label
@@ -59,6 +67,9 @@ var _fps_spin: SpinBox
 var _life_spin: SpinBox
 var _scale_spin: SpinBox
 var _loops_spin: SpinBox
+var _fwd_spin: SpinBox
+var _up_spin: SpinBox
+var _trail_check: CheckBox
 var _rate_slider: HSlider
 var _rate_label: Label
 var _dummy = null            # lab target dummy (training_dummy def: rooted, infinite HP)
@@ -120,6 +131,8 @@ func _populate_effects() -> void:
 		_fx_keys.append("proj")
 	if beh in MUZZLE_BEHAVIORS:
 		_fx_keys.append("muzzle")
+	if beh in ARC_BEHAVIORS:
+		_fx_keys.append("arc")
 	_fx_btn.clear()
 	for i in _fx_keys.size():
 		var spec: Dictionary = EFFECTS[_fx_keys[i]]
@@ -265,12 +278,24 @@ func _refresh_status() -> void:
 			base += " %s proj: procedural." % wid
 		else:
 			base += " %s proj: %s %dx @%.0ffps x%.1f." % [wid, String(psk["path"]), int(psk["frames"]), float(psk["fps"]), float(psk["scale"])]
+			if float(psk.get("fwd", 0.0)) != 0.0 or float(psk.get("up", 0.0)) != 0.0:
+				base += " nudge(%.0f,%.0f)." % [float(psk["fwd"]), float(psk["up"])]
+			if not bool(psk.get("trail", true)):
+				base += " no trail."
 		if String(wdef.behavior) in MUZZLE_BEHAVIORS:
 			var msk: Dictionary = AbilityArt.weapon_muzzle_skin(wdef)
 			if bool(msk.get("fallback", true)):
 				base += " Muzzle: procedural."
 			else:
 				base += " Muzzle: %s %dx @%.0ffps x%.1f." % [String(msk["path"]), int(msk["frames"]), float(msk["fps"]), float(msk["scale"])]
+				if float(msk.get("fwd", 0.0)) != 0.0 or float(msk.get("up", 0.0)) != 0.0:
+					base += " nudge(%.0f,%.0f)." % [float(msk["fwd"]), float(msk["up"])]
+		if String(wdef.behavior) in ARC_BEHAVIORS:
+			var ask: Dictionary = AbilityArt.weapon_arc_skin(wdef)
+			if bool(ask.get("fallback", true)):
+				base += " Arc: procedural."
+			else:
+				base += " Arc: %s %dx @%.0ffps x%.1f." % [String(ask["path"]), int(ask["frames"]), float(ask["fps"]), float(ask["scale"])]
 	else:
 		base += " (no weapon on this character)."
 	if _dummy != null and is_instance_valid(_dummy) and bool(_dummy.alive):
@@ -342,6 +367,8 @@ func _effect_values(spec: Dictionary) -> Array:
 				out.append(int(ctl.value))
 			else:
 				out.append(float(ctl.value))
+		elif ctl is CheckBox:
+			out.append(bool(ctl.button_pressed))
 		else:
 			out.append(null)
 	return out
@@ -354,6 +381,8 @@ func _tres_literal(value, kind: String) -> String:
 			return "\"%s\"" % String(value).c_escape()
 		"int":
 			return str(int(value))
+		"bool":
+			return "true" if bool(value) else "false"
 		_:
 			var f: float = float(value)
 			if f == floorf(f):
@@ -459,7 +488,7 @@ func _build_ui() -> void:
 	v.add_child(_status)
 	v.add_child(UI.label("Live def (kill signature + weapon skins)", 13, UI.PURPLE))
 	v.add_child(_row_buttons(["Kill", "Elite kill", "Attack"], [_on_kill, _on_elite, _on_attack_live]))
-	var cap := UI.label("Kill writes the character .tres. Projectile/Muzzle write the weapon .tres. Trails, casings, arcs, passives stay procedural.", 12, UI.DIM)
+	var cap := UI.label("Kill writes the character .tres. Projectile/Muzzle/Arc write the weapon .tres. Fwd/Up nudge skins in aim space; trail checkbox hides the hardcoded trail. Casings, sparks, passives stay procedural.", 12, UI.DIM)
 	cap.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	v.add_child(cap)
 	v.add_child(UI.label("Target dummy", 13, UI.PURPLE))
@@ -474,12 +503,21 @@ func _build_ui() -> void:
 	_life_spin = _spinner(v, "Life s", 0.28, 0.05, 2.0, 0.05)
 	_scale_spin = _spinner(v, "Scale", 1.0, 0.1, 4.0, 0.1)
 	_loops_spin = _spinner(v, "Loops (0=inf)", 1.0, 0.0, 8.0, 1.0)
+	_fwd_spin = _spinner(v, "Fwd px (aim)", 0.0, -64.0, 64.0, 1.0)
+	_up_spin = _spinner(v, "Up px (aim)", 0.0, -64.0, 64.0, 1.0)
+	_trail_check = CheckBox.new()
+	_trail_check.text = "Hardcoded trail"
+	_trail_check.button_pressed = true
+	v.add_child(_trail_check)
 	_controls["path"] = _path_edit
 	_controls["frames"] = _frames_spin
 	_controls["fps"] = _fps_spin
 	_controls["life"] = _life_spin
 	_controls["scale"] = _scale_spin
 	_controls["loops"] = _loops_spin
+	_controls["fwd"] = _fwd_spin
+	_controls["up"] = _up_spin
+	_controls["trail"] = _trail_check
 	var sb: Button = UI.button("Play sprite", 15, Vector2(140, 36))
 	sb.pressed.connect(_on_sprite)
 	v.add_child(sb)
