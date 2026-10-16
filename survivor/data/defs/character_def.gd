@@ -34,3 +34,16 @@ enum RosterStatus { PLAYABLE, LOCKED_TEASER, HIDDEN }
 ## Each slot: {"sprite": res:// path, "frames": int, "fps": float}. Empty = silhouette fallback.
 ## Convention: art/characters/<id>_base.png, <id>_wA.png, <id>_wB.png, <id>_pA.png, <id>_pB.png (64px cells).
 @export var ability_anims: Dictionary = {}
+## Kill-signature FX override (FxManager.signature_kill). Empty sprite = procedural fallback.
+## Set sprite to a res:// PNG strip (1+ frames, square cells like art/fx/) to replace the
+## hardcoded beam/motes for this character. life = seconds on screen, scale multiplies
+## the elite x2 size, offset shifts the sprite from the corpse, tint multiplies the texture.
+## loops: strip replays over life (1 = play once, N = repeat N times then hold, 0 = replay whole life).
+@export var kill_fx_sprite: String = ""
+@export var kill_fx_frames: int = 1
+@export var kill_fx_fps: float = 8.0
+@export var kill_fx_life: float = 0.28
+@export var kill_fx_scale: float = 1.0
+@export var kill_fx_offset: Vector2 = Vector2.ZERO
+@export var kill_fx_tint: Color = Color.WHITE
+@export var kill_fx_loops: int = 1

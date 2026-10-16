@@ -1,8 +1,8 @@
 78098b89c88a74ebe8c20117b8754620
-::res://::1792032504
+::res://::1792163081
 export_presets.cfg::TextFile::-1::1791318922::0::1::::<><><>0<>0<><>::
 main.tscn::PackedScene::2938443140522804505::1790766811::0::1::::<><><>0<>0<><>::uid://6jtdawkky3rj::::res://src/main.gd
-workbench.md::TextFile::-1::1792032466::0::1::::<><><>0<>0<><>::
+workbench.md::TextFile::-1::1792110249::0::1::::<><><>0<>0<><>::
 ::res://art/::1791324102
 ::res://art/characters/::1791587612
 cowboy.png::CompressedTexture2D::4143901328536151978::1790906761::1790906819::1::::<><><>0<>0<>e1bcabe2c4e6271b463cce6004a62f16<>res://.godot/imported/cowboy.png-77df84f657439c04c889dfe849642a01.ctex::
@@ -39,7 +39,7 @@ skull_projectile.png::CompressedTexture2D::6863969926536926532::1790764032::1790
 aa12.png::CompressedTexture2D::2820028941735829931::1791323613::1791325026::1::::<><><>0<>0<>7c1860a0e81018938d808f343151a83b<>res://.godot/imported/aa12.png-e66dc50dc545cc1f39aafa5b527651ed.ctex::
 cloak.png::CompressedTexture2D::6894787111251117227::1791323613::1791325026::1::::<><><>0<>0<>65ddce94c22c430c70237712e8db3fed<>res://.godot/imported/cloak.png-c2202e915ee0eada34ea938f8c05c6e7.ctex::
 energy_food.png::CompressedTexture2D::5366974979536969530::1791323613::1791325026::1::::<><><>0<>0<>4e8aadd058849e0d84f2ca053cf179e4<>res://.godot/imported/energy_food.png-c812ff1049f28b45dea52c91b24f8848.ctex::
-::res://art/passives/::1792032452
+::res://art/passives/::1792032504
 aerial_strike.png::CompressedTexture2D::5074544022103739934::1791937927::1792025277::1::::<><><>0<>0<>a14930cd2c60f65de6894ee9d628b8e2<>res://.godot/imported/aerial_strike.png-a0e52a24c1978609e3576c66d96687ac.ctex::
 astral_projection.png::CompressedTexture2D::4155480553887528663::1791940620::1792032504::1::::<><><>0<>0<>37ab425a5157a7326180374d92d40494<>res://.godot/imported/astral_projection.png-b04ce4dc893eb014557c8f603b3e1801.ctex::
 flailing_whip.png::CompressedTexture2D::8450621983392249025::1792024028::1792025277::1::::<><><>0<>0<>8f7e62d4f0ddc7e977b0f957450da402<>res://.godot/imported/flailing_whip.png-a9556d617301ae632ef3bfbfc827e2df.ctex::
@@ -150,7 +150,7 @@ spider.tres::Resource/CharacterDef::-1::1791234089::0::1::::<><><>0<>0<><>::res:
 wizard.tres::Resource/CharacterDef::-1::1791234088::0::1::::<><><>0<>0<><>::res://data/defs/character_def.gd
 ::res://data/defs/::1791325025
 ability_def.gd::GDScript::2003440278266602801::1791861535::0::1::::AbilityDef<>Resource<><>0<>0<><>::
-character_def.gd::GDScript::97682030920916878::1791234155::0::1::::CharacterDef<>Resource<><>0<>0<><>::
+character_def.gd::GDScript::97682030920916878::1792111011::0::1::::CharacterDef<>Resource<><>0<>0<><>::
 enemy_def.gd::GDScript::8128305249717694253::1791914205::0::1::::EnemyDef<>Resource<><>0<>0<><>::
 market_item_def.gd::GDScript::4350369855624108417::1791323613::0::1::::MarketItemDef<>Resource<><>0<>0<><>::
 passive_def.gd::GDScript::2824672935337660958::1790764031::0::1::::PassiveDef<>AbilityDef<><>0<>0<><>::
@@ -249,12 +249,12 @@ main.gd::GDScript::2195592567264210395::1791827016::0::1::::<>Node<><>0<>0<><>::
 ability.gd::GDScript::110214310470197856::1791861491::0::1::::Ability<>RefCounted<><>0<>0<><>::
 passive_behaviors.gd::GDScript::3650433652753120876::1791587021::0::1::::PassiveBehaviors<>RefCounted<><>0<>0<><>::
 weapon_behaviors.gd::GDScript::5628544459023254683::1791850450::0::1::::WeaponBehaviors<>RefCounted<><>0<>0<><>::
-::res://src/core/::1791325026
+::res://src/core/::1792109495
 chest_manager.gd::GDScript::6210135125032341557::1792011757::0::1::::ChestManager<>Node2D<><>0<>0<><>::
 coin_manager.gd::GDScript::7015852926298634443::1792025195::0::1::::CoinManager<>Node2D<><>0<>0<><>::
 enemy_manager.gd::GDScript::1145958148074195451::1792029922::0::1::::EnemyManager<>Node<><>0<>0<><>::
-fx_layer.gd::GDScript::6979301955165898957::1790764030::0::1::::FxLayer<>Node2D<><>0<>0<><>::
-fx_manager.gd::GDScript::3524130658230729142::1792029901::0::1::::FxManager<>Node2D<><>0<>0<><>::
+fx_layer.gd::GDScript::6979301955165898957::1792109495::0::1::::FxLayer<>Node2D<><>0<>0<><>::
+fx_manager.gd::GDScript::3524130658230729142::1792111067::0::1::::FxManager<>Node2D<><>0<>0<><>::
 gem_manager.gd::GDScript::5864151827906527622::1791340349::0::1::::GemManager<>Node2D<><>0<>0<><>::
 ground_layer.gd::GDScript::5972162535572488121::1791897844::0::1::::GroundLayer<>Node2D<><>0<>0<><>::
 projectile_manager.gd::GDScript::2362484442242387446::1791914393::0::1::::ProjectileManager<>Node2D<><>0<>0<><>::
@@ -263,7 +263,7 @@ world.gd::GDScript::5675030319414054191::1792010872::0::1::::World<>Node2D<><>0<
 ::res://src/player/::1791149801
 player.gd::GDScript::205768197556342170::1792023495::0::1::::Player<>Node2D<><>0<>0<><>::
 ::res://src/ui/::1791827005
-ability_art.gd::GDScript::5060142499603508314::1791324592::0::1::::AbilityArt<>RefCounted<><>0<>0<><>::
+ability_art.gd::GDScript::5060142499603508314::1792111026::0::1::::AbilityArt<>RefCounted<><>0<>0<><>::
 black_market_screen.gd::GDScript::5531199148598083675::1791897839::0::1::::BlackMarketScreen<>CanvasLayer<><>0<>0<><>::
 character_select.gd::GDScript::2029955155436109121::1791589977::0::1::::CharacterSelect<>CanvasLayer<><>0<>0<><>::
 coin_icon.gd::GDScript::71942531620546347::1792025141::0::1::::CoinIcon<>Control<><>0<>0<><>::
@@ -277,6 +277,8 @@ options_panel.gd::GDScript::1412017781687191729::1792004159::0::1::::OptionsPane
 pause_menu.gd::GDScript::6686315394831726116::1790764030::0::1::::PauseMenu<>CanvasLayer<><>0<>0<><>::
 seal_screen.gd::GDScript::2826753422739684046::1791854950::0::1::::SealScreen<>CanvasLayer<><>0<>0<><>::
 ui.gd::GDScript::629704853395453959::1791569521::0::1::::UI<>RefCounted<><>0<>0<><>::
-::res://tests/::1792011250
+::res://tests/::1792111586
+fx_gallery.gd::GDScript::2280533885714315710::1792111586::0::1::::<>Node<><>0<>0<><>::
+fx_gallery.tscn::PackedScene::-1::1792110214::0::1::::<><><>0<>0<><>::res://tests/fx_gallery.gd
 smoke.gd::GDScript::8517376512033230058::1791153419::0::1::::<>Node<><>0<>0<><>::
 smoke.tscn::PackedScene::-1::1790764031::0::1::::<><><>0<>0<><>::res://tests/smoke.gd

@@ -12,6 +12,7 @@ extends Node2D
 const MAX_PARTICLES := 640
 const MAX_SHAPES := 96
 const MAX_NUMBERS := 60
+const MAX_KILLFX := 10
 
 # Shape priorities. When the shape pool is full, a new shape evicts the lowest-priority,
 # soonest-to-expire shape that is not MORE important than itself; if none qualifies the new
@@ -95,6 +96,7 @@ var _layer_norm: FxLayer
 var _layer_num: FxLayer
 var _pcur := 0
 var _strikes: Array = []
+var _killfx: Array = []
 var _font: Font
 var _crit_fx_ms := 0        # real-time gates so dense fights can't strobe or stutter
 var _crit_stop_ms := 0
@@ -137,6 +139,15 @@ func setup(world_ref) -> void:
 		sp.visible = false
 		add_child(sp)
 		_strikes.append({"sp": sp, "t": 99.0})
+	for i in MAX_KILLFX:
+		var ksp := Sprite2D.new()
+		var kmat := CanvasItemMaterial.new()
+		kmat.blend_mode = CanvasItemMaterial.BLEND_MODE_ADD
+		ksp.material = kmat
+		ksp.z_index = 20
+		ksp.visible = false
+		add_child(ksp)
+		_killfx.append({"sp": ksp, "t": 99.0, "life": 0.28, "fps": 8.0, "frames": 1, "loops": 1})
 	for i in 46:
 		_motes.append({"pos": Vector2(randf_range(-330, 330), randf_range(-190, 190)), "s": randf_range(0.5, 1.5), "ph": randf() * TAU})
 
@@ -559,10 +570,14 @@ func signature_kill(pos: Vector2, elite: bool) -> void:
 				emit(pos, Vector2.from_angle(randf_range(-2.8, -0.35)) * randf_range(60.0, 140.0), randf_range(0.35, 0.55), randf_range(1.5, 2.4), Color(0.65, 0.88, 1.0), 0, 2.5, 320.0, false)
 			if randf() < 0.3:
 				star(pos, 7.0 * kf, Color(1.0, 0.85, 0.35), 0.14, 0.0, PRIO_AMBIENT)
-		4:  # Paladin: a short pillar of light and rising motes
-			beam(pos, -PI * 0.5, 40.0 * kf, 3.0, 0.28, Color(1.0, 0.92, 0.6), PRIO_AMBIENT)
-			for i in _shed_count(2 * k):
-				emit(pos + Vector2(randf_range(-6.0, 6.0), 0.0), Vector2(0.0, -30.0), 0.55, 2.2, Color(1.0, 0.9, 0.55), 1, 2.0, -40.0)
+		4:  # Paladin: sprite override when kill_fx_sprite is set, else pillar of light + motes
+			var kfx: Dictionary = AbilityArt.for_kill(world.player.def)
+			if not bool(kfx.get("fallback", true)):
+				kill_sprite(pos, kf, kfx)
+			else:
+				beam(pos, -PI * 0.5, 40.0 * kf, 3.0, 0.28, Color(1.0, 0.92, 0.6), PRIO_AMBIENT)
+				for i in _shed_count(2 * k):
+					emit(pos + Vector2(randf_range(-6.0, 6.0), 0.0), Vector2(0.0, -30.0), 0.55, 2.2, Color(1.0, 0.9, 0.55), 1, 2.0, -40.0)
 		5:  # Wizard: arcane ring and a tiny zig of lightning
 			ring(pos, 4.0, 22.0 * kf, 0.2, Color(0.6, 0.5, 1.0), 1.5, PRIO_AMBIENT)
 			var zig := PackedVector2Array([pos, pos + Vector2(randf_range(-10.0, 10.0), randf_range(-14.0, -6.0)) * kf, pos + Vector2(randf_range(-16.0, 16.0), randf_range(-26.0, -14.0)) * kf])
@@ -662,6 +677,38 @@ func strike(pos: Vector2, size_scale: float = 0.9) -> void:
 			return
 
 
+## Kill-signature sprite override: plays a PNG strip from CharacterDef kill_fx_* fields.
+## Empty/missing texture = caller keeps the procedural fallback. kf is the elite size scale.
+func kill_sprite(pos: Vector2, kf: float, fx: Dictionary) -> void:
+	for k in _killfx:
+		if float(k.get("t", 99.0)) >= float(k.get("life", 0.28)):
+			var tex: Texture2D = DB.texture(String(fx.get("path", "")))
+			if tex == null:
+				return
+			var sp: Sprite2D = k.get("sp")
+			var frames: int = maxi(1, int(fx.get("frames", 1)))
+			var fps: float = maxf(1.0, float(fx.get("fps", 8.0)))
+			var life: float = maxf(0.05, float(fx.get("life", 0.28)))
+			var sc: float = maxf(0.1, float(fx.get("scale", 1.0))) * kf
+			var off: Vector2 = fx.get("offset", Vector2.ZERO)
+			var tint: Color = fx.get("tint", Color.WHITE)
+			sp.texture = tex
+			sp.hframes = frames
+			sp.vframes = 1
+			sp.frame = 0
+			sp.position = pos + off
+			sp.scale = Vector2(sc, sc)
+			sp.modulate = tint
+			sp.modulate.a = 1.0
+			sp.visible = true
+			k["t"] = 0.0
+			k["life"] = life
+			k["fps"] = fps
+			k["frames"] = frames
+			k["loops"] = maxi(0, int(fx.get("loops", 1)))
+			return
+
+
 func dust(pos: Vector2) -> void:
 	if _pool_fill > SHED_START and randf() > _shed_scale():
 		return
@@ -705,6 +752,23 @@ func _process(delta: float) -> void:
 			sp.modulate.a = clampf((0.5 - st.t) * 5.0, 0.0, 1.0)
 			if st.t >= 0.5:
 				sp.visible = false
+	for k in _killfx:
+		if float(k.get("t", 99.0)) < float(k.get("life", 0.28)):
+			k["t"] = float(k.get("t", 0.0)) + delta
+			var ksp: Sprite2D = k.get("sp")
+			var kframes: int = maxi(1, int(k.get("frames", 1)))
+			var kfps: float = maxf(1.0, float(k.get("fps", 8.0)))
+			var klife: float = maxf(0.05, float(k.get("life", 0.28)))
+			var kt: float = float(k.get("t", 0.0))
+			var kloops: int = maxi(0, int(k.get("loops", 1)))
+			var played: int = int(kt * kfps)
+			if kloops > 0:
+				played = mini(played, kframes * kloops - 1)
+			if kframes > 1:
+				ksp.frame = played % kframes
+			ksp.modulate.a = clampf((klife - kt) / maxf(0.01, klife * 0.5), 0.0, 1.0)
+			if kt >= klife:
+				ksp.visible = false
 	_layer_add.queue_redraw()
 	_layer_norm.queue_redraw()
 	_layer_num.queue_redraw()

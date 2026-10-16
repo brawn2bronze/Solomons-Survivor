@@ -59,6 +59,21 @@ static func icon_for_upgrade(up) -> Dictionary:
     return {"path": path, "frames": 1, "fps": 8.0, "preview": "static", "fallback": fallback}
 
 
+## Kill-signature sprite override for a character def. Empty kill_fx_sprite = procedural fallback.
+## Returns {"path", "frames", "fps", "life", "scale", "offset", "tint", "loops", "fallback"}.
+static func for_kill(def) -> Dictionary:
+    var path: String = String(def.kill_fx_sprite)
+    var frames: int = maxi(1, int(def.kill_fx_frames))
+    var fps: float = maxf(1.0, float(def.kill_fx_fps))
+    var life: float = maxf(0.05, float(def.kill_fx_life))
+    var scale: float = maxf(0.1, float(def.kill_fx_scale))
+    var offset: Vector2 = def.kill_fx_offset
+    var tint: Color = def.kill_fx_tint
+    var loops: int = maxi(0, int(def.kill_fx_loops))
+    var fallback: bool = path == ""
+    return {"path": path, "frames": frames, "fps": fps, "life": life, "scale": scale, "offset": offset, "tint": tint, "loops": loops, "fallback": fallback}
+
+
 static func _branch_slot(def, branch: int) -> String:
     var suffix := "A" if branch == 0 else "B"
     if def is WeaponDef:

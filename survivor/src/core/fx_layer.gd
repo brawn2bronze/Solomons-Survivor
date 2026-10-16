@@ -7,5 +7,5 @@ var mode := 0    # 0 additive world, 1 normal world, 2 screen-space numbers
 
 
 func _draw() -> void:
-    if manager != null:
-        manager.draw_layer(self, mode)
+	if manager != null:
+		manager.draw_layer(self, mode)
