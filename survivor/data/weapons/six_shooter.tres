@@ -19,3 +19,8 @@ icon_frames = 1
 icon_fps = 8.0
 preview_kind = "static"
 anims = {}
+
+proj_fx_sprite = "res://art/fx/bullet.png"
+proj_fx_frames = 1
+proj_fx_fps = 1.0
+proj_fx_scale = 0.8

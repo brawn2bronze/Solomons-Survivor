@@ -104,6 +104,8 @@ var _cues: Array = []
 var _sig_id := ""
 var _sig := 0               # signature number for the current character (0 = none)
 var _sig_budget := SIG_BUDGET_MAX
+var _atk_ms := 0               # real-time gate so volleys read as one flourish
+const ATK_FLOURISH_MIN_MS := 250
 var _honk_ms := 0
 var _pool_fill := 0.0            # particle-pool fill 0..1, refreshed every frame (drives load shedding)
 var _stat_shapes_alive := 0
@@ -255,8 +257,17 @@ func death_burst(pos: Vector2, def, elite: bool) -> void:
 		ring(pos, 2.0, 55.0, 0.3, Color(1, 1, 1), 2.0)
 
 
-func muzzle(pos: Vector2, dir: Vector2, color: Color) -> void:
+## Muzzle flash. With a weapon skin (FX lab muzzle_fx_*), the strip plays at the
+## muzzle instead of the procedural flash + streaks; the ejected casing always
+## stays. Empty/fallback skin = today's procedural look.
+func muzzle(pos: Vector2, dir: Vector2, color: Color, skin: Dictionary = {}) -> void:
 	var a := dir.angle()
+	if not skin.is_empty() and not bool(skin.get("fallback", true)):
+		var mfx: Dictionary = skin.duplicate()
+		mfx["offset"] = dir * 6.0
+		kill_sprite(pos, 1.0, mfx)
+		emit(pos, Vector2.from_angle(a + PI * 0.5 * signf(randf() - 0.5)) * randf_range(40.0, 80.0) + Vector2(0, -40), 0.55, 2.0, Color(0.95, 0.75, 0.3), 3, 2.0, 260.0, false)
+		return
 	emit(pos + dir * 6.0, Vector2.ZERO, 0.06, 8.0, Color(1, 0.95, 0.7, 0.9), 1, 0.0)
 	for i in _shed_count(5):
 		emit(pos + dir * 6.0, Vector2.from_angle(a + randf_range(-0.35, 0.35)) * randf_range(120.0, 260.0), randf_range(0.06, 0.12), 2.0, color, 2, 6.0)
@@ -539,7 +550,9 @@ func _sig_for(id: String) -> int:
 	return 0
 
 
-## A small flourish on every kill, flavoured by the character being played (unknown ids get none).
+## A small flourish on every kill, flavoured by the character being played. A
+## kill_fx_sprite override (FX lab) replaces the procedural flourish for any
+## character; ids with neither get none.
 ## Non-elite kills spend from a refilling budget and thin out under particle load; elites always play,
 ## at double size. Everything is PRIO_AMBIENT / short-lived so it never competes with real cues.
 func signature_kill(pos: Vector2, elite: bool) -> void:
@@ -549,14 +562,20 @@ func signature_kill(pos: Vector2, elite: bool) -> void:
 	if id != _sig_id:
 		_sig_id = id
 		_sig = _sig_for(id)
-	if _sig == 0:
-		return
 	if not elite:
 		if _sig_budget < 1.0 or randf() > _shed_scale():
 			return
 		_sig_budget -= 1.0
 	var k: int = 2 if elite else 1
 	var kf := float(k)
+	# Sprite override wins for every character when kill_fx_sprite is set (wired
+	# from the FX lab); otherwise fall through to the procedural signature.
+	var kfx: Dictionary = AbilityArt.for_kill(world.player.def)
+	if not bool(kfx.get("fallback", true)):
+		kill_sprite(pos, kf, kfx)
+		return
+	if _sig == 0:
+		return
 	match _sig:
 		1:  # Cowboy: brass ping + falling casings
 			star(pos, 8.0 * kf, Color(1.0, 0.85, 0.4), 0.14, 0.0, PRIO_AMBIENT)
@@ -570,14 +589,10 @@ func signature_kill(pos: Vector2, elite: bool) -> void:
 				emit(pos, Vector2.from_angle(randf_range(-2.8, -0.35)) * randf_range(60.0, 140.0), randf_range(0.35, 0.55), randf_range(1.5, 2.4), Color(0.65, 0.88, 1.0), 0, 2.5, 320.0, false)
 			if randf() < 0.3:
 				star(pos, 7.0 * kf, Color(1.0, 0.85, 0.35), 0.14, 0.0, PRIO_AMBIENT)
-		4:  # Paladin: sprite override when kill_fx_sprite is set, else pillar of light + motes
-			var kfx: Dictionary = AbilityArt.for_kill(world.player.def)
-			if not bool(kfx.get("fallback", true)):
-				kill_sprite(pos, kf, kfx)
-			else:
-				beam(pos, -PI * 0.5, 40.0 * kf, 3.0, 0.28, Color(1.0, 0.92, 0.6), PRIO_AMBIENT)
-				for i in _shed_count(2 * k):
-					emit(pos + Vector2(randf_range(-6.0, 6.0), 0.0), Vector2(0.0, -30.0), 0.55, 2.2, Color(1.0, 0.9, 0.55), 1, 2.0, -40.0)
+		4:  # Paladin: pillar of light + motes (sprite override handled above)
+			beam(pos, -PI * 0.5, 40.0 * kf, 3.0, 0.28, Color(1.0, 0.92, 0.6), PRIO_AMBIENT)
+			for i in _shed_count(2 * k):
+				emit(pos + Vector2(randf_range(-6.0, 6.0), 0.0), Vector2(0.0, -30.0), 0.55, 2.2, Color(1.0, 0.9, 0.55), 1, 2.0, -40.0)
 		5:  # Wizard: arcane ring and a tiny zig of lightning
 			ring(pos, 4.0, 22.0 * kf, 0.2, Color(0.6, 0.5, 1.0), 1.5, PRIO_AMBIENT)
 			var zig := PackedVector2Array([pos, pos + Vector2(randf_range(-10.0, 10.0), randf_range(-14.0, -6.0)) * kf, pos + Vector2(randf_range(-16.0, 16.0), randf_range(-26.0, -14.0)) * kf])
@@ -707,6 +722,23 @@ func kill_sprite(pos: Vector2, kf: float, fx: Dictionary) -> void:
 			k["frames"] = frames
 			k["loops"] = maxi(0, int(fx.get("loops", 1)))
 			return
+
+
+## Per-attack character flourish (FX lab atk_fx_* override). Empty sprite = no-op
+## (weapons draw their own FX). Throttled in real time so multi-pellet volleys
+## and chain jumps read as one hit; plays at the attacker, shifted along dir.
+func attack_flourish(origin: Vector2, dir: Vector2) -> void:
+	if world == null or world.player == null:
+		return
+	var afx: Dictionary = AbilityArt.for_attack(world.player.def)
+	if bool(afx.get("fallback", true)):
+		return
+	var now := Time.get_ticks_msec()
+	if now < _atk_ms:
+		return
+	_atk_ms = now + ATK_FLOURISH_MIN_MS
+	var d := dir.normalized() if dir.length_squared() > 0.01 else Vector2.RIGHT
+	kill_sprite(origin + d * 20.0, 1.0, afx)
 
 
 func dust(pos: Vector2) -> void:

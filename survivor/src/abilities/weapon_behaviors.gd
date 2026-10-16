@@ -76,8 +76,8 @@ class Revolver extends Ability:
         for i in n:
             var spread := deg_to_rad(randf_range(-1.0, 1.0) * float(p["spread_deg"])) + (0.0 if i == 0 else randf_range(-0.14, 0.14))
             var o := player.fire_origin(i, dir)
-            world().projectiles.fire(ProjectileManager.Kind.BULLET, o, dir.rotated(spread), float(p["speed"]), dmg(), float(p["radius"]), int(p["pierce"]), float(p["range"]) / float(p["speed"]), col, {"knock": 30.0})
-        world().fx.muzzle(player.fire_origin(0, dir), dir, col)
+            world().projectiles.fire(ProjectileManager.Kind.BULLET, o, dir.rotated(spread), float(p["speed"]), dmg(), float(p["radius"]), int(p["pierce"]), float(p["range"]) / float(p["speed"]), col, {"skin": AbilityArt.weapon_proj_skin(def), "knock": 30.0})
+        world().fx.muzzle(player.fire_origin(0, dir), dir, col, AbilityArt.weapon_muzzle_skin(def))
         Audio.sfx("revolver_shot", -7.0)
         Game.shake(0.9)
         player.impulse(-dir * 28.0)
@@ -127,9 +127,9 @@ class Cannon extends Ability:
         for i in n:
             var o := player.fire_origin(i, dir)
             var d := dir.rotated(0.0 if i == 0 else randf_range(-0.16, 0.16))
-            world().projectiles.fire(ProjectileManager.Kind.CANNON, o, d, float(p["speed"]), dmg(), float(p["radius"]), int(p["pierce"]), float(p["range"]) / float(p["speed"]), col, {"knock": 240.0, "shrapnel": int(p["shrapnel"]), "shr_dmg": float(p["shrapnel_damage"])})
+            world().projectiles.fire(ProjectileManager.Kind.CANNON, o, d, float(p["speed"]), dmg(), float(p["radius"]), int(p["pierce"]), float(p["range"]) / float(p["speed"]), col, {"skin": AbilityArt.weapon_proj_skin(def), "knock": 240.0, "shrapnel": int(p["shrapnel"]), "shr_dmg": float(p["shrapnel_damage"])})
         var m := player.fire_origin(0, dir)
-        world().fx.muzzle(m, dir, col)
+        world().fx.muzzle(m, dir, col, AbilityArt.weapon_muzzle_skin(def))
         for k in 10:
             world().fx.emit(m, Vector2.from_angle(dir.angle() + randf_range(-0.5, 0.5)) * randf_range(40.0, 150.0), randf_range(0.3, 0.6), randf_range(3.0, 6.0), Color(0.6, 0.6, 0.6, 0.6), 1, 3.0, 0.0, false)
         Audio.sfx("hand_cannon", -3.0)
@@ -182,6 +182,7 @@ class MeleeSwipe extends Ability:
         for e in hits:
             world().enemies.damage(e, dmg(), e.pos - origin, float(p["knockback"]), col)
         world().fx.slash_arc(origin, d.angle(), r, arc, col, flip, 0.18 if def.id == "katana" else 0.24)
+        world().fx.attack_flourish(origin, d)
         for i in 6:
             world().fx.emit(origin + d * r * 0.8, Vector2.from_angle(d.angle() + flip * randf_range(0.2, 1.4)) * randf_range(60.0, 140.0), 0.15, 2.0, col, 2, 5.0)
         Audio.sfx(def.audio_event, -5.0)
@@ -192,7 +193,7 @@ class MeleeSwipe extends Ability:
                 Game.hit_stop(0.035, 0.05)
         player.impulse(d * (60.0 if heavy else 30.0))
         if flags.get("wave", false):
-            world().projectiles.fire(ProjectileManager.Kind.HOLY, origin, d, 380.0, dmg(float(p["wave_damage"])), 24.0, 999, 0.75, Color(1.0, 0.93, 0.6), {"w": 0.75, "knock": 60.0})
+            world().projectiles.fire(ProjectileManager.Kind.HOLY, origin, d, 380.0, dmg(float(p["wave_damage"])), 24.0, 999, 0.75, Color(1.0, 0.93, 0.6), {"skin": AbilityArt.weapon_proj_skin(def), "w": 0.75, "knock": 60.0})
 
     func _try_charge() -> void:
         var tgt: EnemyManager.E = world().enemies.nearest(player.global_position, 320.0)
@@ -233,6 +234,7 @@ class MeleeBite extends Ability:
             world().fx.emit(origin + Vector2.from_angle(a) * reach * 0.4, Vector2.from_angle(a) * 260.0, 0.1, 2.5, Color(1, 1, 1), 2, 4.0)
             world().fx.emit(origin + Vector2.from_angle(a) * reach * 0.8, Vector2.from_angle(a) * 120.0, 0.16, 2.0, Color(0.8, 0.4, 1.0), 2, 4.0)
         Audio.sfx("fang_bite", -6.0)
+        world().fx.attack_flourish(origin, dir)
         if paralysed > 0:
             Game.shake(1.5)
         player.impulse(dir * 90.0)
@@ -270,6 +272,7 @@ class ChainLightning extends Ability:
         for i in int(p["chains"]) + 1:
             world().enemies.damage(cur, dmg() * (1.0 if i == 0 else 0.85), Vector2.ZERO, 0.0, col)
             world().fx.bolt(WeaponBehaviors.jagged(from, cur.pos + Vector2(0, -8)), col, 0.2)
+            world().fx.attack_flourish(player.global_position, cur.pos - player.global_position)
             world().fx.emit(cur.pos + Vector2(0, -8), Vector2.ZERO, 0.1, 9.0, Color(0.85, 0.95, 1.0), 1, 0.0)
             from = cur.pos + Vector2(0, -8)
             var nxt: EnemyManager.E = world().enemies.nearest(cur.pos, float(p["chain_range"]), hit)
@@ -339,7 +342,7 @@ class Screech extends Ability:
         var origin := player.global_position + Vector2(0, -14)
         for i in player.scaled_count(1):
             var d := dir.rotated(0.0 if i == 0 else (float(i) * 0.35 * (1.0 if i % 2 == 0 else -1.0)))
-            world().projectiles.fire(ProjectileManager.Kind.WAVE, origin, d, speed, dmg(), float(p["width"]) * 0.5, 999, dist / speed, Color(1.0, 0.95, 0.75), {"w": 0.85, "knock": 50.0, "rehit": 9999.0, "grow": 26.0})
+            world().projectiles.fire(ProjectileManager.Kind.WAVE, origin, d, speed, dmg(), float(p["width"]) * 0.5, 999, dist / speed, Color(1.0, 0.95, 0.75), {"skin": AbilityArt.weapon_proj_skin(def), "w": 0.85, "knock": 50.0, "rehit": 9999.0, "grow": 26.0})
         world().fx.ring(origin, 3.0, 30.0, 0.2, Color(1.0, 0.95, 0.75), 2.0)
         Audio.sfx("screech", -6.0)
         Game.shake(1.0)
@@ -363,7 +366,7 @@ class SkullSummon extends Ability:
             var off := (float(i) - float(count - 1) * 0.5) * 0.42
             var d := base_dir.rotated(off)
             var size := float(p["size"])
-            world().projectiles.fire(ProjectileManager.Kind.SKULL, player.global_position + Vector2(0, -16), d, float(p["speed"]), dmg(), 11.0 * size, 999, float(p["life"]), Color(0.45, 1.0, 0.9), {"rehit": 0.45, "knock": 25.0})
+            world().projectiles.fire(ProjectileManager.Kind.SKULL, player.global_position + Vector2(0, -16), d, float(p["speed"]), dmg(), 11.0 * size, 999, float(p["life"]), Color(0.45, 1.0, 0.9), {"skin": AbilityArt.weapon_proj_skin(def), "rehit": 0.45, "knock": 25.0})
         world().fx.ring(player.global_position + Vector2(0, -16), 3.0, 24.0, 0.25, Color(0.45, 1.0, 0.9), 2.0)
         Audio.sfx("skull_projectile", -6.0)
 
@@ -386,6 +389,7 @@ class GooseCharge extends Ability:
             opts["damage"] = float(p["charge_damage"]) * player.stat("damage")
             opts["hit_radius"] = 16.0
         player.start_dash(dir, float(p["distance"]), float(p["charge_speed"]), opts)
+        world().fx.attack_flourish(player.global_position, dir)
         world().fx.ring(player.global_position, 6.0, fr, 0.45, Color(1.0, 1.0, 0.8), 3.0)
         world().fx.ring(player.global_position, 2.0, fr * 0.6, 0.3, Color(1, 1, 1), 2.0)
         Audio.sfx("goose_charge", -3.0)
@@ -426,7 +430,7 @@ class PickupVolley extends Ability:
         var pierce: int = int(p["pierce"])
         var radius: float = float(p["radius"])
         var dmg_mult: float = 1.0
-        var opts: Dictionary = {"knock": float(p["knockback"])}
+        var opts: Dictionary = {"knock": float(p["knockback"]), "skin": AbilityArt.weapon_proj_skin(def)}
         var burn_dps: float = mod_f("burn_dps")                       # Brimstone Breath
         if burn_dps > 0.0:
             opts["burn_dps"] = burn_dps * player.stat("damage")
@@ -456,7 +460,7 @@ class PickupVolley extends Ability:
         var ring_every: int = int(mod_f("ring_every"))                # Storm Nova
         if ring_every > 0 and volley_n % ring_every == 0:
             _fire_ring(kind, col, pierce, opts)
-        world().fx.muzzle(player.fire_origin(0, dir), dir, col)
+        world().fx.muzzle(player.fire_origin(0, dir), dir, col, AbilityArt.weapon_muzzle_skin(def))
         Audio.sfx(def.audio_event, -7.0, 0.8 if heavy else 1.0)
         if heavy:
             Game.shake(2.5)
@@ -523,6 +527,7 @@ class PickupBlast extends Ability:
 
     ## One explosion: damage + optional stun (Concussion Charge), rings, sparks, decal. Mini blasts are the Cluster aftershocks.
     func _detonate(at: Vector2, r: float, damage_amount: float, mini: bool) -> void:
+        world().fx.attack_flourish(player.global_position, at - player.global_position)
         var col: Color = def.color
         var stun_t: float = mod_f("stun")
         for e in world().enemies.query_circle(at, r):
@@ -605,6 +610,7 @@ class PickupCaltrops extends Ability:
         world().add_decal(d)
         world().fx.emit(pos, Vector2(0, -20.0), 0.2, 2.0, def.color, 1, 1.0)
         Audio.sfx(def.audio_event, -14.0, 1.4, 0.2)
+        world().fx.attack_flourish(player.global_position, player.aim_dir())
 
     func hud_line() -> String:
         return "%d/%d" % [caltrops.size(), int(round(float(p["max_caltrops"])))]
@@ -740,6 +746,7 @@ class MyceliumNet extends Ability:
         while nodes.size() > int(round(float(p["max_nodes"]))):
             _expire_node(0, area)
         _blast(pos, float(p["node_radius"]) * area, float(p["pop_dmg"]) * player.stat("damage"), true)
+        world().fx.attack_flourish(player.global_position, pos - player.global_position)
         world().fx.ring(pos, 4.0, float(p["node_radius"]) * area, 0.3, def.color, 3.0)
         Audio.sfx(def.audio_event, -6.0)
         Game.shake(1.0)
@@ -999,6 +1006,7 @@ class FlickerStrike extends Ability:
         if slash_dir.length_squared() > 1.0:
             ang = slash_dir.angle()
         world().fx.slash_arc(tgt.pos, ang, SLASH_RADIUS, SLASH_ARC, def.color)
+        world().fx.attack_flourish(player.global_position, tgt.pos - from)
         world().fx.ring(tgt.pos, 4.0, 26.0, 0.22, Color(0.75, 0.92, 1.0), 2.0)
         world().enemies.damage(tgt, dmg(), tgt.pos - from, float(p["knockback"]), def.color)
         Audio.sfx(def.audio_event, -4.0, randf_range(0.95, 1.1))
@@ -1088,6 +1096,7 @@ class WormRide extends Ability:
         hit_timers.clear()
         sfx_t = 0.0
         player.add_buff("shamir_ride", ride_t, {}, {"move_speed": float(p["speed_mult"])})
+        world().fx.attack_flourish(player.global_position, player.aim_dir())
         player.invuln = maxf(player.invuln, 0.2)
         world().fx.ring(player.global_position, 8.0, 60.0, 0.35, def.color, 3.0)
         Audio.sfx(def.audio_event, -4.0, 1.0)

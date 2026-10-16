@@ -101,7 +101,10 @@ func hit_stop(seconds: float, time_scale: float = 0.04) -> void:
 	Engine.time_scale = time_scale
 	await get_tree().create_timer(seconds, true, false, true).timeout
 	if token == _hit_stop_token:
-		Engine.time_scale = dev_time_rate if dev_active else 1.0
+		# Lab/dev slow-mo baseline owns the clock: dev_time_rate is 1.0 in real
+		# runs (only dev-config/overlay/gallery ever change it), so this is a
+		# no-op there and a slow-mo restore in the FX lab / dev sandbox.
+		Engine.time_scale = dev_time_rate
 
 
 ## Death slow-mo: takes ownership of the clock so a late hit-stop can't snap it back to 1.0.

@@ -33,6 +33,7 @@ class Pr:
     var splash_r := 0.0           # hostile: AoE burst when it expires near the player (0 = off)
     var splash_dmg := 0.0
     var splash_falloff := false
+    var skin := {}                # weapon FX skin (AbilityArt.weapon_proj_skin); {} / fallback = procedural head
 
 var world
 var live: Array[Pr] = []
@@ -72,6 +73,7 @@ func _take():
     p.splash_r = 0.0
     p.splash_dmg = 0.0
     p.splash_falloff = false
+    p.skin = {}
     p.w = 0.0
     p.spin = randf() * TAU
     live.append(p)
@@ -98,8 +100,12 @@ func fire(kind: int, pos: Vector2, dir: Vector2, speed: float, dmg: float, radiu
     p.w = float(opts.get("w", 0.0))
     p.burn_dps = float(opts.get("burn_dps", 0.0))
     p.burn_t = float(opts.get("burn_time", 0.0))
+    var sk = opts.get("skin", {})
+    p.skin = sk if sk is Dictionary else {}
     for i in p.trail.size():
         p.trail[i] = pos
+    if world != null:
+        world.fx.attack_flourish(p.pos, p.vel)
     return p
 
 
@@ -204,6 +210,29 @@ func _shrapnel(p: Pr, e: EnemyManager.E) -> void:
         var s: Pr = fire(Kind.SHRAPNEL, e.pos, Vector2.from_angle(a), 320.0, p.dmg * p.shr_dmg, 3.0, 1, 0.45, Color(1.0, 0.85, 0.4))
         if s != null:
             s.hit[e.uid] = 1.0e9          # shrapnel never re-hits the enemy it spawned from
+            s.skin = p.skin               # sub-munitions inherit the weapon skin
+
+
+## Skinned projectile head (weapon proj_fx_*). Faces travel direction, advances
+## with age, fades at end of life like the skull head. Returns false when there
+## is no usable skin so the caller draws its procedural head instead.
+func _draw_skin(p: Pr, sk: Dictionary) -> bool:
+    if sk.is_empty() or bool(sk.get("fallback", true)):
+        return false
+    var tex: Texture2D = DB.texture(String(sk.get("path", "")))
+    if tex == null:
+        return false
+    var frames: int = maxi(1, int(sk.get("frames", 1)))
+    var fps: float = maxf(1.0, float(sk.get("fps", 8.0)))
+    var sc: float = maxf(0.1, float(sk.get("scale", 1.0)))
+    var cw: float = tex.get_size().x / float(frames)
+    var ch: float = tex.get_size().y
+    var fr: int = int(p.age * fps) % frames
+    var fade: float = clampf(minf(p.life * 2.0, p.age * 4.0), 0.0, 1.0)
+    draw_set_transform(p.pos, p.vel.angle(), Vector2(sc, sc))
+    draw_texture_rect_region(tex, Rect2(Vector2(-cw, -ch) * 0.5, Vector2(cw, ch)), Rect2(fr * cw, 0, cw, ch), Color(1, 1, 1, fade))
+    draw_set_transform(Vector2.ZERO, 0.0, Vector2.ONE)
+    return true
 
 
 func _draw() -> void:
@@ -225,16 +254,20 @@ func _draw() -> void:
                 var tc := c
                 tc.a = f * f * 0.75
                 draw_line(p.trail[k], p.trail[k + 1], tc, maxf(1.0, tw * f))
+        var sk: Dictionary = p.skin if p.skin is Dictionary else {}
         match p.kind:
             Kind.BULLET:
-                draw_circle(p.pos, 3.2, Color(c.r, c.g, c.b, 0.35))
-                draw_circle(p.pos, 1.8, Color(1, 1, 0.9, 1))
+                if not _draw_skin(p, sk):
+                    draw_circle(p.pos, 3.2, Color(c.r, c.g, c.b, 0.35))
+                    draw_circle(p.pos, 1.8, Color(1, 1, 0.9, 1))
             Kind.CANNON:
-                draw_circle(p.pos, p.radius * 1.7, Color(c.r, c.g, c.b, 0.25))
-                draw_circle(p.pos, p.radius, c)
-                draw_circle(p.pos, p.radius * 0.55, Color(1, 0.95, 0.8, 1))
+                if not _draw_skin(p, sk):
+                    draw_circle(p.pos, p.radius * 1.7, Color(c.r, c.g, c.b, 0.25))
+                    draw_circle(p.pos, p.radius, c)
+                    draw_circle(p.pos, p.radius * 0.55, Color(1, 0.95, 0.8, 1))
             Kind.SHRAPNEL:
-                draw_circle(p.pos, 2.0, Color(1, 0.95, 0.7, 1))
+                if not _draw_skin(p, sk):
+                    draw_circle(p.pos, 2.0, Color(1, 0.95, 0.7, 1))
             Kind.SHURIKEN:
                 # Textured spinning blade: cycles the 3-frame 32px strip and rotates in flight.
                 if _shuriken_tex != null:
@@ -249,16 +282,18 @@ func _draw() -> void:
                 draw_circle(p.pos, 4.5, c)
                 draw_circle(p.pos, 2.2, Color(1, 0.95, 0.7))
             Kind.SKULL:
-                if _skull_tex != null:
-                    var s: float = 26.0 * p.radius / 12.0
-                    var fr := int(p.age * 8.0) % 2
-                    var fade := clampf(minf(p.life * 2.0, p.age * 4.0), 0.0, 1.0)
-                    draw_texture_rect_region(_skull_tex, Rect2(p.pos - Vector2(s, s) * 0.5, Vector2(s, s)), Rect2(fr * 64, 0, 64, 64), Color(1, 1, 1, 0.62 * fade))
+                if not _draw_skin(p, sk):
+                    if _skull_tex != null:
+                        var s: float = 26.0 * p.radius / 12.0
+                        var fr := int(p.age * 8.0) % 2
+                        var fade := clampf(minf(p.life * 2.0, p.age * 4.0), 0.0, 1.0)
+                        draw_texture_rect_region(_skull_tex, Rect2(p.pos - Vector2(s, s) * 0.5, Vector2(s, s)), Rect2(fr * 64, 0, 64, 64), Color(1, 1, 1, 0.62 * fade))
             Kind.WAVE, Kind.HOLY:
-                var dir: float = p.vel.angle()
-                var life_k := clampf(p.life * 3.0, 0.0, 1.0)
-                for ring_i in 3:
-                    var rr: float = p.radius * (1.0 + ring_i * 0.35) * 0.9
-                    var ac := c
-                    ac.a = life_k * (0.75 - ring_i * 0.2)
-                    draw_arc(p.pos - p.vel.normalized() * ring_i * 5.0, rr, dir - p.w, dir + p.w, 14, ac, 2.5 - ring_i * 0.5)
+                if not _draw_skin(p, sk):
+                    var dir: float = p.vel.angle()
+                    var life_k := clampf(p.life * 3.0, 0.0, 1.0)
+                    for ring_i in 3:
+                        var rr: float = p.radius * (1.0 + ring_i * 0.35) * 0.9
+                        var ac := c
+                        ac.a = life_k * (0.75 - ring_i * 0.2)
+                        draw_arc(p.pos - p.vel.normalized() * ring_i * 5.0, rr, dir - p.w, dir + p.w, 14, ac, 2.5 - ring_i * 0.5)

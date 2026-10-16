@@ -47,3 +47,14 @@ enum RosterStatus { PLAYABLE, LOCKED_TEASER, HIDDEN }
 @export var kill_fx_offset: Vector2 = Vector2.ZERO
 @export var kill_fx_tint: Color = Color.WHITE
 @export var kill_fx_loops: int = 1
+## Attack-flourish FX override (FxManager.attack_flourish, throttled). Same strip
+## convention as kill_fx_*: empty sprite = no-op (weapons draw their own FX).
+## Plays at the player, shifted forward along the attack dir; offset adds on top.
+@export var atk_fx_sprite: String = ""
+@export var atk_fx_frames: int = 1
+@export var atk_fx_fps: float = 8.0
+@export var atk_fx_life: float = 0.28
+@export var atk_fx_scale: float = 1.0
+@export var atk_fx_offset: Vector2 = Vector2.ZERO
+@export var atk_fx_tint: Color = Color.WHITE
+@export var atk_fx_loops: int = 1

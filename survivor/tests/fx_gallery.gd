@@ -1,9 +1,15 @@
 extends Node
-## Kill-FX lab + publisher. Open fx_gallery.tscn and play the scene (F6):
+## FX lab + publisher. Open fx_gallery.tscn and play the scene (F6):
 ## director paused + godmode, so only the FX you trigger is on screen.
 ## Pick a character, pick an effect, tune the sprite tryout (unsaved preview),
-## then Publish writes the values into that character's .tres and applies them
-## to the live def, so the Kill buttons preview the published result at once.
+## then Publish writes the values into the target .tres and applies them
+## to the live def. Kill buttons preview the published kill FX; Attack fires
+## the real weapon at the training dummy, showing published weapon skins live.
+## Kill dummy runs the full death FX quietly (no drops/bestiary).
+## Targets: Kill signature -> character .tres; Projectile / Muzzle-flash skins
+## -> weapon .tres (resolved from the character's weapon). Trails, casings,
+## melee arcs, beams, rings, decals and passives (e.g. whip lash) are
+## procedural and untouched by this lab.
 ## Scaling: new characters appear in the picker automatically (DB scans
 ## data/characters/). New effects need one EFFECTS entry + their resolver;
 ## picker, writer and preview logic are shared.
@@ -15,12 +21,31 @@ extends Node
 const EFFECTS := {
 	"kill": {
 		"label": "Kill signature",
+		"target": "character",
 		"fields": ["kill_fx_sprite", "kill_fx_frames", "kill_fx_fps", "kill_fx_life", "kill_fx_scale", "kill_fx_loops"],
 		"roles": ["path", "frames", "fps", "life", "scale", "loops"],
 		"kinds": ["path", "int", "float", "float", "float", "int"],
 	},
+	"proj": {
+		"label": "Projectile skin",
+		"target": "weapon",
+		"fields": ["proj_fx_sprite", "proj_fx_frames", "proj_fx_fps", "proj_fx_scale"],
+		"roles": ["path", "frames", "fps", "scale"],
+		"kinds": ["path", "int", "float", "float"],
+	},
+	"muzzle": {
+		"label": "Muzzle-flash skin",
+		"target": "weapon",
+		"fields": ["muzzle_fx_sprite", "muzzle_fx_frames", "muzzle_fx_fps", "muzzle_fx_scale", "muzzle_fx_life"],
+		"roles": ["path", "frames", "fps", "scale", "life"],
+		"kinds": ["path", "int", "float", "float", "float"],
+	},
 }
-const EFFECT_ORDER := ["kill"]
+const EFFECT_ORDER := ["kill", "proj", "muzzle"]
+## Weapon behaviors that fire skinnable projectiles / muzzle flashes. Melee,
+## beam, dash, ring and zone weapons offer Kill only (arc skins = Phase 2).
+const PROJ_BEHAVIORS := ["revolver", "cannon", "skull", "wave"]
+const MUZZLE_BEHAVIORS := ["revolver", "cannon"]
 
 var _world: World
 var _status: Label
@@ -36,6 +61,8 @@ var _scale_spin: SpinBox
 var _loops_spin: SpinBox
 var _rate_slider: HSlider
 var _rate_label: Label
+var _dummy = null            # lab target dummy (training_dummy def: rooted, infinite HP)
+var _fx_keys: Array = ["kill"]   # effect rows offered for the current weapon
 
 
 func _ready() -> void:
@@ -57,12 +84,19 @@ func _open_world(char_id: String) -> void:
 		remove_child(_world)
 		_world.queue_free()
 		_world = null
+	_dummy = null            # E objects belong to the old EnemyManager; never reuse
 	var w: World = World.new()
 	add_child(w)
 	w.start(char_id)
 	_world = w
 	w.enemies.director_paused = true
 	w.dev_set_godmode(true)
+	w.set_no_gems(true)         # lab: kills drop nothing, ever
+	_populate_effects()         # weapon part rows depend on the live weapon
+	if _rate_slider != null:
+		# World.start() reset the clock to 1.0; restore the slider baseline.
+		w.dev_set_time_rate(_rate_slider.value)
+		_rate_label.text = "Time rate x%.2f (slow-mo FX)" % _rate_slider.value
 	_refresh_status()
 
 
@@ -75,18 +109,35 @@ func _populate_characters() -> void:
 		_char_btn.add_item(String(_char_ids[i]), i)
 
 
+## Effect rows follow the live weapon: Kill always, plus the part-swap rows
+## the weapon actually draws. Keeps the previous selection when still offered.
 func _populate_effects() -> void:
+	var keep: String = _effect_key()
+	_fx_keys.clear()
+	_fx_keys.append("kill")
+	var beh: String = _weapon_behavior()
+	if beh in PROJ_BEHAVIORS:
+		_fx_keys.append("proj")
+	if beh in MUZZLE_BEHAVIORS:
+		_fx_keys.append("muzzle")
 	_fx_btn.clear()
-	for i in EFFECT_ORDER.size():
-		var spec: Dictionary = EFFECTS[EFFECT_ORDER[i]]
-		_fx_btn.add_item(String(spec.get("label", EFFECT_ORDER[i])), i)
-	_fx_btn.select(0)
+	for i in _fx_keys.size():
+		var spec: Dictionary = EFFECTS[_fx_keys[i]]
+		_fx_btn.add_item(String(spec.get("label", _fx_keys[i])), i)
+	_fx_btn.select(maxi(0, _fx_keys.find(keep)))
+
+
+## Behavior key of the preview world's live weapon ("" when none yet).
+func _weapon_behavior() -> String:
+	if is_instance_valid(_world) and _world.player != null and _world.player.weapon != null:
+		return String(_world.player.weapon.def.behavior)
+	return ""
 
 
 func _effect_key() -> String:
-	if _fx_btn == null or _fx_btn.item_count == 0:
+	if _fx_btn == null or _fx_btn.item_count == 0 or _fx_keys.is_empty():
 		return "kill"
-	return String(EFFECT_ORDER[_fx_btn.selected])
+	return String(_fx_keys[clampi(_fx_btn.selected, 0, _fx_keys.size() - 1)])
 
 
 func _on_char_selected(idx: int) -> void:
@@ -113,8 +164,60 @@ func _on_elite() -> void:
 	_refresh_status()
 
 
-func _on_sprite() -> void:
-	var fx: Dictionary = {
+func _on_attack_live() -> void:
+	if not is_instance_valid(_world) or _world.player == null:
+		return
+	_ensure_dummy()
+	_refresh_status()
+	if _dummy == null:
+		_status.text += " Dummy unavailable (missing def or pool empty)."
+		return
+	if _world.player.weapon != null:
+		_status.text += " Firing %s at dummy." % String(_world.player.weapon.def.id)
+	else:
+		_status.text += " (no weapon on this character)."
+
+
+## Lab target dummy: the training_dummy def (glitch-goblin sprite, "dummy"
+## behavior: rooted, infinite HP, zero contact damage, never in spawn tables).
+## Timers sit expired with no target, so the real weapon usually fires on the
+## next frame, showing published weapon skins live against a real target.
+func _ensure_dummy() -> void:
+	if _dummy != null and is_instance_valid(_dummy) and bool(_dummy.alive) and is_instance_valid(_world):
+		_dummy.pos = _world.player.global_position + Vector2(70, 0)
+		_dummy.vel = Vector2.ZERO
+		return
+	var def = DB.enemies.get("training_dummy")
+	if def == null or not is_instance_valid(_world):
+		return
+	_dummy = _world.enemies.spawn(def, _world.player.global_position + Vector2(70, 0), 1.0, 0.0)
+
+
+func _on_kill_dummy() -> void:
+	if not is_instance_valid(_world):
+		return
+	_ensure_dummy()
+	if _dummy == null or not bool(_dummy.alive):
+		_refresh_status()
+		_status.text += " No live dummy to kill."
+		return
+	_world.enemies.slay_quiet(_dummy)
+	_dummy = null
+	_refresh_status()
+	_status.text += " Dummy slain (death FX only — no drops, no bestiary)."
+
+
+func _on_respawn_dummy() -> void:
+	if not is_instance_valid(_world):
+		return
+	_dummy = null
+	_ensure_dummy()
+	_refresh_status()
+	_status.text += " Dummy respawned." if _dummy != null else " Dummy unavailable."
+
+
+func _tryout_dict() -> Dictionary:
+	return {
 		"path": _path_edit.text.strip_edges(),
 		"frames": int(_frames_spin.value),
 		"fps": float(_fps_spin.value),
@@ -125,6 +228,10 @@ func _on_sprite() -> void:
 		"tint": Color.WHITE,
 		"fallback": false,
 	}
+
+
+func _on_sprite() -> void:
+	var fx: Dictionary = _tryout_dict()
 	if String(fx.get("path", "")) == "":
 		_status.text = "Type a PNG strip path first."
 		return
@@ -133,6 +240,8 @@ func _on_sprite() -> void:
 
 
 func _on_rate(v: float) -> void:
+	if not is_instance_valid(_world):
+		return
 	_world.dev_set_time_rate(v)
 	_rate_label.text = "Time rate x%.2f (slow-mo FX)" % v
 
@@ -143,15 +252,38 @@ func _refresh_status() -> void:
 		return
 	var id: String = String(_world.player.def.id)
 	var kfx: Dictionary = AbilityArt.for_kill(_world.player.def)
+	var base: String = ""
 	if bool(kfx.get("fallback", true)):
-		_status.text = "%s .tres: procedural fallback (kill_fx_sprite empty)." % id
+		base = "%s .tres: procedural fallback (kill_fx_sprite empty)." % id
 	else:
-		_status.text = "%s .tres: %s  %dx @%.0ffps  %.2fs  x%.1f  L%d" % [id, String(kfx["path"]), int(kfx["frames"]), float(kfx["fps"]), float(kfx["life"]), float(kfx["scale"]), int(kfx["loops"])]
+		base = "%s .tres: %s  %dx @%.0ffps  %.2fs  x%.1f  L%d" % [id, String(kfx["path"]), int(kfx["frames"]), float(kfx["fps"]), float(kfx["life"]), float(kfx["scale"]), int(kfx["loops"])]
+	if _world.player.weapon != null:
+		var wdef = _world.player.weapon.def
+		var wid: String = String(wdef.id)
+		var psk: Dictionary = AbilityArt.weapon_proj_skin(wdef)
+		if bool(psk.get("fallback", true)):
+			base += " %s proj: procedural." % wid
+		else:
+			base += " %s proj: %s %dx @%.0ffps x%.1f." % [wid, String(psk["path"]), int(psk["frames"]), float(psk["fps"]), float(psk["scale"])]
+		if String(wdef.behavior) in MUZZLE_BEHAVIORS:
+			var msk: Dictionary = AbilityArt.weapon_muzzle_skin(wdef)
+			if bool(msk.get("fallback", true)):
+				base += " Muzzle: procedural."
+			else:
+				base += " Muzzle: %s %dx @%.0ffps x%.1f." % [String(msk["path"]), int(msk["frames"]), float(msk["fps"]), float(msk["scale"])]
+	else:
+		base += " (no weapon on this character)."
+	if _dummy != null and is_instance_valid(_dummy) and bool(_dummy.alive):
+		base += " Dummy: alive."
+	else:
+		base += " Dummy: slain."
+	_status.text = base
 
 
 ## Publish: validate the tryout controls, upsert the active effect's fields in
-## the selected character's .tres (text edit, rest of file untouched), apply the
-## same values to the live def, and refresh so Kill previews instantly.
+## the target .tres (character .tres for Kill, weapon .tres for part skins;
+## text edit, rest of file untouched), apply the same values to the live def,
+## and refresh so the buttons preview them with no scene restart.
 func _on_publish() -> void:
 	var effect: String = _effect_key()
 	var spec: Dictionary = EFFECTS.get(effect, {})
@@ -161,20 +293,38 @@ func _on_publish() -> void:
 	if sprite_path == "":
 		_status.text = "Type a PNG strip path first."
 		return
+	sprite_path = sprite_path.replace("\\", "/")
+	if not sprite_path.begins_with("res://"):
+		_status.text = "Path must live in the project: res://art/fx/name.png (no C:\\ paths — they break exports)."
+		return
 	if not ResourceLoader.exists(sprite_path):
 		_status.text = "PNG not found: %s (drop it in art/fx/ first)." % sprite_path
 		return
-	if _char_btn.selected < 0 or _char_btn.selected >= _char_ids.size():
-		_status.text = "Pick a character first."
-		return
-	var char_id: String = String(_char_ids[_char_btn.selected])
-	var tres_path: String = "res://data/characters/%s.tres" % char_id
+	var target_id := ""
+	var tres_path := ""
+	var live_def = null
+	if String(spec.get("target", "character")) == "weapon":
+		if not is_instance_valid(_world) or _world.player == null or _world.player.weapon == null:
+			_status.text = "No live weapon to publish to."
+			return
+		target_id = String(_world.player.weapon.def.id)
+		tres_path = "res://data/weapons/%s.tres" % target_id
+		live_def = _world.player.weapon.def
+	else:
+		if _char_btn.selected < 0 or _char_btn.selected >= _char_ids.size():
+			_status.text = "Pick a character first."
+			return
+		target_id = String(_char_ids[_char_btn.selected])
+		tres_path = "res://data/characters/%s.tres" % target_id
+		if is_instance_valid(_world) and _world.player != null and String(_world.player.def.id) == target_id:
+			live_def = _world.player.def
 	if not _write_tres_fields(tres_path, spec, values):
 		_status.text = "Publish failed: could not write %s." % tres_path
 		return
-	_apply_to_live_def(char_id, spec, values)
+	if live_def != null:
+		_apply_to_live_def(live_def, spec, values)
 	_refresh_status()
-	_status.text = "Published to %s.tres + live preview. %s" % [char_id, _status.text]
+	_status.text = "Published to %s.tres + live preview. %s" % [target_id, _status.text]
 
 
 ## Reads the active effect's values from the shared controls by role.
@@ -259,16 +409,12 @@ func _write_tres_fields(tres_path: String, spec: Dictionary, values: Array) -> b
 	return true
 
 
-## Applies published values to the live preview def (same object DB holds for
-## this session), so the Kill buttons play them with no scene restart.
-func _apply_to_live_def(char_id: String, spec: Dictionary, values: Array) -> void:
-	if not is_instance_valid(_world) or _world.player == null:
-		return
-	if String(_world.player.def.id) != char_id:
-		return
+## Applies published values to a live def object (same object DB holds for
+## this session), so the preview buttons play them with no scene restart.
+func _apply_to_live_def(live_def, spec: Dictionary, values: Array) -> void:
 	var fields: Array = spec.get("fields", [])
 	for i in fields.size():
-		_world.player.def.set(String(fields[i]), values[i])
+		live_def.set(String(fields[i]), values[i])
 
 
 func _build_ui() -> void:
@@ -297,7 +443,7 @@ func _build_ui() -> void:
 	v.add_theme_constant_override("separation", 6)
 	v.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	scroll.add_child(v)
-	v.add_child(UI.label("KILL FX LAB", 18, UI.GOLD))
+	v.add_child(UI.label("FX Lab", 18, UI.GOLD))
 	v.add_child(UI.label("Character (.tres target)", 13, UI.PURPLE))
 	_char_btn = OptionButton.new()
 	_char_btn.custom_minimum_size = Vector2(280, 32)
@@ -311,8 +457,13 @@ func _build_ui() -> void:
 	_status = UI.label("", 14, UI.DIM)
 	_status.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	v.add_child(_status)
-	v.add_child(UI.label("Live def (signature_kill)", 13, UI.PURPLE))
-	v.add_child(_row_buttons(["Kill", "Elite kill"], [_on_kill, _on_elite]))
+	v.add_child(UI.label("Live def (kill signature + weapon skins)", 13, UI.PURPLE))
+	v.add_child(_row_buttons(["Kill", "Elite kill", "Attack"], [_on_kill, _on_elite, _on_attack_live]))
+	var cap := UI.label("Kill writes the character .tres. Projectile/Muzzle write the weapon .tres. Trails, casings, arcs, passives stay procedural.", 12, UI.DIM)
+	cap.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	v.add_child(cap)
+	v.add_child(UI.label("Target dummy", 13, UI.PURPLE))
+	v.add_child(_row_buttons(["Kill dummy", "Respawn dummy"], [_on_kill_dummy, _on_respawn_dummy]))
 	v.add_child(UI.label("Sprite tryout (kill_sprite, unsaved)", 13, UI.PURPLE))
 	_path_edit = LineEdit.new()
 	_path_edit.text = "res://art/fx/skull_projectile.png"

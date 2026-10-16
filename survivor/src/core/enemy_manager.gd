@@ -384,6 +384,9 @@ func _elite_aura(e: E) -> void:
 
 func _update_enemy(e: E, delta: float, pp: Vector2) -> void:
     var d: EnemyDef = e.def
+    # Lab target prop: infinite health. DoT ticks bypass damage(), so pin HP here.
+    if String(d.behavior) == "dummy":
+        e.hp = e.max_hp
     e.flash = maxf(0.0, e.flash - delta)
     e.contact_cd -= delta * e.atk_slow
     if e.slow_t > 0.0:
@@ -425,6 +428,9 @@ func _update_enemy(e: E, delta: float, pp: Vector2) -> void:
                 move = _charger(e, delta, dir, dist)
             "glitch":
                 move = _glitch(e, delta, dir, dist)
+            "dummy":
+                # Lab target prop: rooted; the FX gallery re-pins it each Attack press.
+                move = Vector2.ZERO
             "blink":
                 move = _blink(e, delta, dir, dist)
             "ranged":
@@ -450,7 +456,7 @@ func _update_enemy(e: E, delta: float, pp: Vector2) -> void:
     var is_blink_vanished: bool = String(d.behavior) == "blink" and e.state == 1
     if e.stun > 0.0:
         sp.frame = 0
-    elif String(d.behavior) == "glitch":
+    elif String(d.behavior) == "glitch" or String(d.behavior) == "dummy":
         # Random-skip playback preserves the authored white-out / dark strobe (4-frame 64px strip).
         # Frozen during the lag hang so the sprite visibly stalls, then snaps to a fresh frame.
         if e.state != 1:
@@ -824,20 +830,22 @@ func damage(e: E, amount: float, knock_dir: Vector2 = Vector2.ZERO, knock_force:
         return
     if String(e.def.behavior) == "glitch" and e.state == 1:
         return
+    var is_dummy := String(e.def.behavior) == "dummy"
     var crit: bool = randf() < 0.07 + float(player.stat("luck")) * 0.25 + float(player.stat("crit_chance"))
     if crit:
         amount *= 2.0
-    e.hp -= amount
-    _maybe_execute(e)
+    if not is_dummy:
+        e.hp -= amount
+        _maybe_execute(e)
     e.flash = 0.14 if crit else 0.09
-    if knock_force > 0.0:
+    if knock_force > 0.0 and not is_dummy:
         e.knock += knock_dir.normalized() * knock_force * (0.35 if e.is_elite else 1.0)
     world.fx.damage_number(e.pos + Vector2(randf_range(-4, 4), -e.radius * 1.5), amount, crit, e.is_elite)
     world.fx.hit_sparks(e.pos, knock_dir, tint, 4 if not crit else 8)
     if crit:
         world.fx.crit_feel(e.pos, e.is_elite)
     Audio.sfx(e.def.hit_event, -9.0)
-    if e.hp <= 0.0:
+    if e.hp <= 0.0 and not is_dummy:
         _kill(e)
 
 
@@ -870,7 +878,7 @@ func slow(e: E, mult: float, seconds: float) -> void:
     e.slow_t = maxf(e.slow_t, seconds)
 
 
-func _kill(e: E) -> void:
+func _kill(e: E, quiet: bool = false) -> void:
     if not e.alive:
         return
     e.alive = false
@@ -881,20 +889,28 @@ func _kill(e: E) -> void:
     active.pop_back()
     if e.is_elite:
         elites.erase(e)
-    world.gems.drop(e.pos, e.def.xp, e.is_elite)
-    world.coins.on_enemy_killed(e)
-    if e.is_elite:
-        world.chests.drop(e.pos)
+    if not quiet:
+        world.gems.drop(e.pos, e.def.xp, e.is_elite)
+        world.coins.on_enemy_killed(e)
+        if e.is_elite:
+            world.chests.drop(e.pos)
     world.fx.death_burst(e.pos, e.def, e.is_elite)
     world.fx.signature_kill(e.pos, e.is_elite)
     if float(e.def.boss_time) > 0.0:
         world.fx.clear_cues(e.get_instance_id())
         world.fx.boss_kill_feel(e.pos)
-    elif e.is_elite:
+    elif e.is_elite and not quiet:
         world.fx.elite_kill_feel(e.pos)
     Audio.sfx("enemy_death", -5.0)
-    world.on_kill(e)
+    if not quiet:
+        world.on_kill(e)
     _free.append(e)
+
+
+## FX-lab helper: run the full death FX for a lab dummy without drops,
+## bestiary entries, or on_kill procs.
+func slay_quiet(e: E) -> void:
+    _kill(e, true)
 
 
 func alive_count() -> int:

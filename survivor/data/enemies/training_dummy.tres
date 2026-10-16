@@ -1,0 +1,29 @@
+[gd_resource type="Resource" script_class="EnemyDef" load_steps=2 format=3]
+
+[ext_resource type="Script" path="res://data/defs/enemy_def.gd" id="1_s"]
+
+[resource]
+script = ExtResource("1_s")
+id = "training_dummy"
+display_name = "Training Dummy"
+family = "goblin"
+max_hp = 500.0
+speed = 0.0
+contact_damage = 0.0
+xp = 0
+radius = 10.0
+sprite = "res://art/enemies/glitch_goblin.png"
+frames = 4
+behavior = "dummy"
+height = 0
+is_elite = false
+can_hit_flying = false
+hit_event = "goblin_hit"
+sprite_scale = 1.0
+spawn_weight = 0.0
+spawn_start = 0.0
+spawn_end = 9999.0
+elite_every = 0.0
+shoot_interval = 0.0
+shoot_speed = 0.0
+shoot_damage = 0.0

@@ -59,19 +59,60 @@ static func icon_for_upgrade(up) -> Dictionary:
     return {"path": path, "frames": 1, "fps": 8.0, "preview": "static", "fallback": fallback}
 
 
-## Kill-signature sprite override for a character def. Empty kill_fx_sprite = procedural fallback.
+## Per-character sprite overrides, read off <prefix>_sprite/frames/fps/life/scale/
+## offset/tint/loops fields of the def. Empty sprite = fallback/no-op for the
+## caller (kill keeps its procedural flourish, attack draws nothing extra).
 ## Returns {"path", "frames", "fps", "life", "scale", "offset", "tint", "loops", "fallback"}.
-static func for_kill(def) -> Dictionary:
-    var path: String = String(def.kill_fx_sprite)
-    var frames: int = maxi(1, int(def.kill_fx_frames))
-    var fps: float = maxf(1.0, float(def.kill_fx_fps))
-    var life: float = maxf(0.05, float(def.kill_fx_life))
-    var scale: float = maxf(0.1, float(def.kill_fx_scale))
-    var offset: Vector2 = def.kill_fx_offset
-    var tint: Color = def.kill_fx_tint
-    var loops: int = maxi(0, int(def.kill_fx_loops))
+static func _for_fx(def, prefix: String) -> Dictionary:
+    var path: String = String(def.get(prefix + "_sprite"))
+    var frames: int = maxi(1, int(def.get(prefix + "_frames")))
+    var fps: float = maxf(1.0, float(def.get(prefix + "_fps")))
+    var life: float = maxf(0.05, float(def.get(prefix + "_life")))
+    var scale: float = maxf(0.1, float(def.get(prefix + "_scale")))
+    var offset: Vector2 = def.get(prefix + "_offset")
+    var tint: Color = def.get(prefix + "_tint")
+    var loops: int = maxi(0, int(def.get(prefix + "_loops")))
     var fallback: bool = path == ""
     return {"path": path, "frames": frames, "fps": fps, "life": life, "scale": scale, "offset": offset, "tint": tint, "loops": loops, "fallback": fallback}
+
+
+## Kill-signature sprite override for a character def. Empty kill_fx_sprite = procedural fallback.
+static func for_kill(def) -> Dictionary:
+    return _for_fx(def, "kill_fx")
+
+
+## Attack-flourish sprite override for a character def. Empty atk_fx_sprite = no flourish.
+static func for_attack(def) -> Dictionary:
+    return _for_fx(def, "atk_fx")
+
+
+## Projectile skin for a weapon def. Empty proj_fx_sprite = procedural fallback
+## (today's per-kind head). Shape matches _for_fx; "life"/"loops" unused.
+static func weapon_proj_skin(wdef) -> Dictionary:
+    return _weapon_fx(wdef, "proj_fx", 0.28)
+
+
+## Muzzle-flash skin for a weapon def. Empty muzzle_fx_sprite = procedural
+## fallback (flash disc + streaks + casing). Played via kill_sprite.
+static func weapon_muzzle_skin(wdef) -> Dictionary:
+    return _weapon_fx(wdef, "muzzle_fx", 0.12)
+
+
+static func _weapon_fx(wdef, prefix: String, default_life: float) -> Dictionary:
+    if wdef == null:
+        return {"path": "", "frames": 1, "fps": 8.0, "life": default_life, "scale": 1.0, "offset": Vector2.ZERO, "tint": Color.WHITE, "loops": 1, "fallback": true}
+    var path: String = String(wdef.get(prefix + "_sprite"))
+    return {
+        "path": path,
+        "frames": maxi(1, int(wdef.get(prefix + "_frames"))),
+        "fps": maxf(1.0, float(wdef.get(prefix + "_fps"))),
+        "life": maxf(0.05, float(wdef.get(prefix + "_life")) if prefix == "muzzle_fx" else default_life),
+        "scale": maxf(0.1, float(wdef.get(prefix + "_scale"))),
+        "offset": Vector2.ZERO,
+        "tint": Color.WHITE,
+        "loops": 1,
+        "fallback": path == "",
+    }
 
 
 static func _branch_slot(def, branch: int) -> String:
