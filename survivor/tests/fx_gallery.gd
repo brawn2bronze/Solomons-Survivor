@@ -285,10 +285,18 @@ func _build_ui() -> void:
 	panel.offset_left = 12.0
 	panel.offset_right = 326.0
 	panel.offset_top = 90.0
+	panel.anchor_bottom = 1.0
+	panel.offset_bottom = -12.0
 	root.add_child(panel)
+	var scroll: ScrollContainer = ScrollContainer.new()
+	scroll.horizontal_scroll_mode = ScrollContainer.SCROLL_MODE_DISABLED
+	scroll.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	scroll.size_flags_vertical = Control.SIZE_EXPAND_FILL
+	panel.add_child(scroll)
 	var v: VBoxContainer = VBoxContainer.new()
 	v.add_theme_constant_override("separation", 6)
-	panel.add_child(v)
+	v.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	scroll.add_child(v)
 	v.add_child(UI.label("KILL FX LAB", 18, UI.GOLD))
 	v.add_child(UI.label("Character (.tres target)", 13, UI.PURPLE))
 	_char_btn = OptionButton.new()
