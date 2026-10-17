@@ -2,8 +2,8 @@ class_name CoinManager
 extends Node2D
 ## Pooled coin pickups (the Seal Fragment currency; code name Coin* frozen until A6). Drop rules live here: every kill rolls a luck-scaled chance for one
 ## coin; elites always shower coins and a boss (EnemyDef.coin_drop) drops a jackpot. Pickup feel clones GemManager:
-## bob, magnet, sparkle, pitch-climbing audio, and overflow merges into a nearby coin. Collected coins go straight to
-## the persistent balance (Meta) and the per-run tally (world.run_coins, shown on the HUD and game over).
+## bob, magnet, sparkle, pitch-climbing audio, and overflow merges into a nearby coin. Collected coins credit the run's
+## escrow tally (world.credit_fragments): a normal run banks them in Meta only on Withdraw, a dev run credits Meta live.
 
 const MAX := 120
 const MERGE_R := 72.0        # widened to match stride-sampled scan: overflow values still find a nearby merge target instead of fizzling
@@ -149,7 +149,7 @@ func _process(delta: float) -> void:
             c.vel *= exp(-6.0 * delta)
         c.pos += c.vel * delta
         if c.pos.distance_squared_to(pp) < COLLECT_R * COLLECT_R and c.spawn_t > 0.1:
-            # Batched: Meta balance, run tally and signal fire once with the same total.
+            # Batched: one escrow credit (World.credit_fragments) and one pickup sfx per frame.
             coin_sum += c.value
             coin_n += 1
             coin_pos = c.pos
@@ -157,8 +157,7 @@ func _process(delta: float) -> void:
             _free.append(c)
         i -= 1
     if coin_n > 0:
-        Meta.add_coins(coin_sum)
-        world.run_coins += coin_sum
+        world.credit_fragments(coin_sum)
         Audio.coin_pickup(coin_n)
         world.fx.emit(coin_pos, Vector2(0, -26.0), 0.22, 3.0, SPARK_COLOR, 1, 2.0)
     # Perf: an empty canvas is already clean after the final clear, so skip the

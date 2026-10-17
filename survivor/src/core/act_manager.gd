@@ -86,18 +86,22 @@ func begin_act(i: int, set_clock := true, instant := false) -> void:
 
 
 ## The unique act boss died (called from World.on_kill).
-## PHASE-2 SHIM: stop music, clear the field, vacuum pickups, then auto-advance.
-## Phase 2 replaces this with the Act Cleared screen (Descend / Withdraw).
+## Dev sandbox keeps the Phase-1 shim (clear the field, then auto-advance). A
+## normal run hands off to World.run_clear_beat, which freezes the run and shows
+## the Act Cleared screen (Descend / Withdraw).
 func boss_slain(def) -> void:
     boss_defeated.emit(def)
-    world._set_music("", 1.2)   # empty key resets the poll so the next act's music plays
-    world.enemies.wipe_quiet()
-    world.gems.attract_all()
-    await world.get_tree().create_timer(2.5, true, false, true).timeout
-    if next_is_playable():
-        begin_act(idx + 1)
-    else:
-        world.announce("THE FOURTH GATE HOLDS", false)
+    if Game.dev_active:
+        world._set_music("", 1.2)   # empty key resets the poll so the next act's music plays
+        world.enemies.wipe_quiet()
+        world.gems.attract_all()
+        await world.get_tree().create_timer(2.5, true, false, true).timeout
+        if next_is_playable():
+            begin_act(idx + 1)
+        else:
+            world.announce("THE FOURTH GATE HOLDS", false)
+        return
+    world.run_clear_beat(def)
 
 
 func _process(delta: float) -> void:

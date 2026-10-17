@@ -44,13 +44,16 @@ var light_mat: ShaderMaterial
 var acts: ActManager
 var act_ambient: ActAmbient
 var act_banner: ActBanner
+var act_clear: ActClearScreen
 var sim_running := false
 var run_time := 0.0
 var no_gems := false      # in-game sandbox lock: enemies drop nothing
 var no_levels := false    # in-game sandbox lock: XP ignored, level picker never opens
 var no_treasures := false # sandbox lock: elites drop no treasure chests, field wiped on enable
 var dev_time_rate := 1.0  # sandbox slow-mo baseline for FX inspection
-var run_coins := 0         # coins collected this run (HUD + game over); the balance itself lives in Meta
+var run_coins := 0         # escrow: Fragments collected this run (HUD + game over); banked to Meta on Withdraw
+var run_lost := 0          # Fragments forfeited on death (escrow, non-dev): shown on the game-over screen
+var run_banked := 0        # Fragments actually banked by bank_run(): shown on the victory screen
 var market_unlocked_now := false   # this run's boss kill opened the Black Market
 var decals: Array = []
 var cam_pos := Vector2.ZERO
@@ -74,6 +77,9 @@ var _tint_tgt := Color(0.015, 0.02, 0.06, 1.0)
 var _vignette_pulse := 0.0
 var _edge_col := Color(0, 0, 0, 0)
 var _over := false
+var _banked := false       # bank_run guard: escrow banks exactly once
+var _clearing := false     # Act Cleared beat running or clear screen open: blocks pause
+var rentals_stripped := false   # Withdraw drops the one-battle rental (Phase 3 reads this)
 
 
 func start(char_id: String) -> void:
@@ -159,6 +165,10 @@ func start(char_id: String) -> void:
 	gameover = GameOverScreen.new()
 	add_child(gameover)
 	gameover.action.connect(func(a: String) -> void: exit_requested.emit(a))
+	act_clear = ActClearScreen.new()
+	add_child(act_clear)
+	act_clear.descend.connect(_on_clear_descend)
+	act_clear.withdraw.connect(_on_clear_withdraw)
 	player.leveled_up.connect(_on_level_up)
 	player.died.connect(_on_died)
 	if Game.dev_active:
@@ -385,7 +395,7 @@ func _process(delta: float) -> void:
 
 
 func _unhandled_input(event: InputEvent) -> void:
-	if event.is_action_pressed("pause") and sim_running and not levelup.visible and not _over:
+	if event.is_action_pressed("pause") and sim_running and not levelup.visible and not _over and not _clearing:
 		pause_menu.open()
 		get_viewport().set_input_as_handled()
 
@@ -1024,11 +1034,94 @@ func build_choices() -> Array:
 	return cards
 
 
+# ------------------------------------------------------------------ act clear + fragment escrow
+## Fragments picked up during a run. Dev sandbox credits Meta live (legacy
+## behaviour); a normal run holds them in escrow (run_coins) until Withdraw.
+func credit_fragments(n: int) -> void:
+	if n <= 0:
+		return
+	if Game.dev_active:
+		Meta.add_coins(n)
+	run_coins += n
+
+
+## Bank the escrowed run into the persistent balance. Guarded to run once.
+func bank_run() -> void:
+	if _banked:
+		return
+	_banked = true
+	run_banked = run_coins
+	if run_coins > 0:
+		Meta.add_coins(run_coins)
+	Meta.flush()
+
+
+## True once every picker has resolved (open draft, pending levels/chests and owed pairs).
+func pickers_done() -> bool:
+	return not levelup.visible and _pending_levels == 0 and _pending_chests == 0 and _pending_owed.is_empty()
+
+
+## Act Cleared beat (Phase 2, replaces the old auto-advance shim). Called by
+## ActManager.boss_slain for the unique act boss, non-dev only: stop music,
+## quiet-wipe the field, vacuum pickups, let the run breathe, wait out any
+## pickers (boss chests / level-ups resolve first), then freeze and offer the choice.
+func run_clear_beat(def) -> void:
+	_clearing = true
+	_set_music("", 1.2)
+	enemies.wipe_quiet()
+	gems.attract_all()
+	Game.hit_stop(0.12)
+	await get_tree().create_timer(2.5, true, false, true).timeout
+	while not pickers_done():
+		await get_tree().create_timer(0.1, true, false, true).timeout
+	var next = acts.next_act()
+	var forced: bool = not acts.next_is_playable()
+	sim_running = false
+	get_tree().paused = true
+	act_clear.show_clear(acts.current(), next, run_coins, forced, String(def.display_name))
+
+
+## Descend: same run continues into the next act (clock resumes from its start,
+## banner + theme + music crossfade), with 8s of zero director spawns under the banner.
+func _on_clear_descend() -> void:
+	act_clear.hide_screen()
+	_clearing = false
+	get_tree().paused = false
+	sim_running = true
+	acts.begin_act(acts.idx + 1)
+	enemies.breather(8.0)
+
+
+func _on_clear_withdraw() -> void:
+	withdraw()
+
+
+## Withdraw at the clear beat: bank the escrow, drop the one-battle rental, show
+## the victory summary. Rentals never carry out (Phase 3 excludes the rented
+## weapon from the checkpoint); `rentals_stripped` records it for that step.
+func withdraw() -> void:
+	if _over:
+		return
+	_over = true
+	_clearing = false
+	bank_run()
+	rentals_stripped = true
+	sim_running = false
+	Audio.stop_music(1.0)
+	act_clear.hide_screen()
+	get_tree().paused = false
+	gameover.show_victory(self, run_banked, not acts.next_is_playable())
+
+
 # ------------------------------------------------------------------ death
 func _on_died() -> void:
 	if _over:
 		return
 	_over = true
+	if not Game.dev_active:
+		# Escrow forfeit: unbanked Fragments are lost; the Meta balance is untouched.
+		run_lost = run_coins
+		run_coins = 0
 	Meta.flush()
 	sim_running = false
 	Audio.stop_music(1.0)
