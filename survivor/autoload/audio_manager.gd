@@ -29,6 +29,7 @@ const EVENTS := {
     "level_up": "res://audio/player/level_up.wav",
     "character_select": "res://audio/player/character_select.wav",
     "coin_pickup": "res://audio/player/coin_pickup.wav",
+    "frog_fart": "res://audio/player/frog-fart.wav",
     # ui
     "button_click": "res://audio/ui/button_click.wav",
     "menu_open": "res://audio/ui/menu_open.wav",

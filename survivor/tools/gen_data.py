@@ -106,6 +106,8 @@ ART = {
     "greatsword": dict(icon="res://art/weapons/greatsword.png", icon_frames=1, icon_fps=8.0, preview_kind="static", anims={}),
     "prayer": dict(icon="res://art/passives/prayer.png", icon_frames=1, icon_fps=8.0, preview_kind="static", anims={}),
     "merlins_book": dict(icon="res://art/weapons/merlins_book.png", icon_frames=1, icon_fps=8.0, preview_kind="static", anims={}),
+    "turds": dict(icon="res://art/passives/turd.png", icon_frames=1, icon_fps=8.0, preview_kind="static", anims={}),
+    "pickup_shamir_tooth": dict(icon="res://art/weapons/shamir_tooth.png", icon_frames=1, icon_fps=8.0, preview_kind="static", anims={}),
 }
 
 UPGRADE_ART = {
@@ -319,7 +321,8 @@ ENEMIES = [
     dict(id="zombie", name="Zombie", family="goblin", hp=44, speed=32, damage=9, xp=2, radius=10, sprite="zombie", frames=4, behavior="chaser", height=0, elite=False, hit="goblin_hit", scale=0.85, weight=5, start=90, end=9999),
     dict(id="goblin_assassin", name="Goblin Assassin", family="goblin", hp=12, speed=84, damage=10, xp=2, radius=8, sprite="goblin_assassin", frames=4, behavior="charger", height=0, elite=False, hit="goblin_hit", scale=1.0, weight=4, start=120, end=9999),
     dict(id="spider_enemy", name="Spider", family="goblin", hp=12, speed=88, damage=8, xp=2, radius=8, sprite="spider_enemy", frames=6, behavior="chaser", height=0, elite=False, hit="goblin_hit", scale=1.0, weight=4, start=120, end=9999),
-    dict(id="raptor", name="Raptor", family="dinosaur", hp=52, speed=104, damage=12, xp=4, radius=11, sprite="raptor", frames=4, behavior="charger", height=0, elite=False, hit="dinosaur_hit", scale=1.0, weight=4, start=180, end=9999),
+    dict(id="raptor", name="Raptor", family="dinosaur", hp=52, speed=104, damage=12, xp=4, radius=11, sprite="raptor", frames=8, behavior="charger", height=0, elite=False, hit="dinosaur_hit", scale=1.0, weight=4, start=180, end=9999),
+    dict(id="mummy", name="Mummy", family="skeleton", hp=60, speed=30, damage=11, xp=3, radius=11, sprite="mummy", frames=4, behavior="chaser", height=0, elite=False, hit="skeleton_hit", scale=1.0, weight=4, start=150, end=9999),
     dict(id="goblin_brute", name="Goblin Brute", family="goblin", hp=420, speed=44, damage=22, xp=40, radius=18, sprite="goblin_brute", frames=4, behavior="chaser", height=0, elite=True, can_hit_flying=True, hit="goblin_hit", scale=1.6, weight=0, start=150, end=9999, elite_every=75),
     dict(id="dragon_whelp", name="Dragon Whelp", family="dragon", hp=320, speed=60, damage=18, xp=60, radius=16, sprite="dragon_whelp", frames=4, behavior="ranged", height=1, elite=True, can_hit_flying=True, hit="dragon_hit", scale=1.5, weight=0, start=240, end=9999, elite_every=110, shoot_interval=2.3, shoot_speed=170, shoot_damage=14),
 ]

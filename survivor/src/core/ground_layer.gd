@@ -11,6 +11,7 @@ var world
 var floor_tex: ImageTexture
 var shadow_tex: ImageTexture
 var _caltrop_tex: Texture2D
+var _turd_tex: Texture2D
 var _blast_tex: Dictionary = {}
 var glow_layer: GroundGlow
 var _time := 0.0
@@ -213,17 +214,23 @@ func _decal(d: Dictionary) -> void:
         "turd":
             var poison: bool = bool(d.get("poison", false))
             var t: float = float(d["t"])
-            var body := Color(0.36, 0.22, 0.1) if not poison else Color(0.28, 0.4, 0.12)
             var fade: float = clampf((15.0 - t) * 0.5, 0.35, 1.0)
-            body.a = fade
+            var tpop: float = minf(1.0, t * 5.0 + 0.25)
+            if _turd_tex == null:
+                _turd_tex = DB.texture("res://art/passives/turd.png")
             draw_circle(pos + Vector2(0, 1), 5.5, Color(0, 0, 0, 0.35 * fade))
-            draw_circle(pos, 4.5, body)
-            draw_circle(pos + Vector2(0, -3), 3.3, body.lightened(0.08))
-            draw_circle(pos + Vector2(0, -5.5), 2.0, body.lightened(0.16))
-            draw_rect(Rect2(pos + Vector2(-2, -4), Vector2(1, 1)), Color(1, 1, 1, fade * 0.6))
             if poison:
                 var gs := Color(0.5, 1.0, 0.3, 0.16 * fade)
                 draw_circle(pos, 16.0 + sin(t * 4.0) * 2.0, gs)
+            if _turd_tex != null:
+                var ts: float = 22.0 * tpop
+                draw_texture_rect(_turd_tex, Rect2(pos - Vector2(ts, ts) * 0.5, Vector2(ts, ts)), false, Color(1, 1, 1, fade))
+            else:
+                var body := Color(0.36, 0.22, 0.1) if not poison else Color(0.28, 0.4, 0.12)
+                body.a = fade
+                draw_circle(pos, 4.5, body)
+                draw_circle(pos + Vector2(0, -3), 3.3, body.lightened(0.08))
+                draw_rect(Rect2(pos + Vector2(-2, -4), Vector2(1, 1)), Color(1, 1, 1, fade * 0.6))
         "caltrop":
             var ct: float = float(d["t"])
             var cr: float = float(d.get("r", 14.0))

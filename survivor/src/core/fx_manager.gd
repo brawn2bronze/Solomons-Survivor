@@ -13,6 +13,8 @@ const MAX_PARTICLES := 640
 const MAX_SHAPES := 96
 const MAX_NUMBERS := 60
 const MAX_KILLFX := 10
+const MAX_SUMMON := 24
+const SUMMON_PATH := "res://art/fx/summon.png"
 
 # Shape priorities. When the shape pool is full, a new shape evicts the lowest-priority,
 # soonest-to-expire shape that is not MORE important than itself; if none qualifies the new
@@ -97,6 +99,8 @@ var _layer_num: FxLayer
 var _pcur := 0
 var _strikes: Array = []
 var _killfx: Array = []
+var _summons: Array = []
+var _summon_tex: Texture2D
 var _font: Font
 var _crit_fx_ms := 0        # real-time gates so dense fights can't strobe or stutter
 var _crit_stop_ms := 0
@@ -150,6 +154,15 @@ func setup(world_ref) -> void:
 		ksp.visible = false
 		add_child(ksp)
 		_killfx.append({"sp": ksp, "t": 99.0, "life": 0.28, "fps": 8.0, "frames": 1, "loops": 1})
+	for i in MAX_SUMMON:
+		var ssp := Sprite2D.new()
+		var smat := CanvasItemMaterial.new()
+		smat.blend_mode = CanvasItemMaterial.BLEND_MODE_ADD
+		ssp.material = smat
+		ssp.z_index = 19
+		ssp.visible = false
+		add_child(ssp)
+		_summons.append({"sp": ssp, "t": 99.0, "life": 0.84, "fps": 18.0, "frames": 15})
 	for i in 46:
 		_motes.append({"pos": Vector2(randf_range(-330, 330), randf_range(-190, 190)), "s": randf_range(0.5, 1.5), "ph": randf() * TAU})
 
@@ -748,6 +761,29 @@ func kill_sprite(pos: Vector2, kf: float, fx: Dictionary) -> void:
 			return
 
 
+## Enemy summon circle: plays the 15-frame summon strip once at a spawn point. Cosmetic
+## overlay only - the enemy sprite is already live underneath, so it never gates gameplay.
+## Dedicated pool so heavy spawning never starves the kill-signature pool.
+func summon(pos: Vector2, scale: float = 1.0) -> void:
+	for s in _summons:
+		if float(s.get("t", 99.0)) >= float(s.get("life", 0.84)):
+			if _summon_tex == null:
+				_summon_tex = DB.texture(SUMMON_PATH)
+			if _summon_tex == null:
+				return
+			var sp: Sprite2D = s.get("sp")
+			sp.texture = _summon_tex
+			sp.hframes = maxi(1, int(s.get("frames", 15)))
+			sp.vframes = 1
+			sp.frame = 0
+			sp.position = pos
+			sp.scale = Vector2.ONE * scale
+			sp.modulate = Color(1, 1, 1, 1)
+			sp.visible = true
+			s["t"] = 0.0
+			return
+
+
 ## Per-attack character flourish (FX lab atk_fx_* override). Empty sprite = no-op
 ## (weapons draw their own FX). Throttled in real time so multi-pellet volleys
 ## and chain jumps read as one hit; plays at the attacker, shifted along dir.
@@ -825,6 +861,18 @@ func _process(delta: float) -> void:
 			ksp.modulate.a = clampf((klife - kt) / maxf(0.01, klife * 0.5), 0.0, 1.0)
 			if kt >= klife:
 				ksp.visible = false
+	for s in _summons:
+		if float(s.get("t", 99.0)) < float(s.get("life", 0.84)):
+			s["t"] = float(s.get("t", 0.0)) + delta
+			var ssp: Sprite2D = s.get("sp")
+			var sframes: int = maxi(1, int(s.get("frames", 15)))
+			var sfps: float = maxf(1.0, float(s.get("fps", 18.0)))
+			var slife: float = maxf(0.05, float(s.get("life", 0.84)))
+			var st: float = float(s.get("t", 0.0))
+			ssp.frame = mini(sframes - 1, int(st * sfps))
+			ssp.modulate.a = clampf((slife - st) / maxf(0.01, slife * 0.5), 0.0, 1.0)
+			if st >= slife:
+				ssp.visible = false
 	_layer_add.queue_redraw()
 	_layer_norm.queue_redraw()
 	_layer_num.queue_redraw()

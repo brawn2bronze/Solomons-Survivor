@@ -27,6 +27,7 @@ var projectiles: ProjectileManager
 var gems: GemManager
 var chests: ChestManager
 var coins: CoinManager
+var critters: CritterManager
 var fx: FxManager
 var status_icons: StatusIcons
 var camera: Camera2D
@@ -88,6 +89,9 @@ func start(char_id: String) -> void:
 	coins = CoinManager.new()
 	add_child(coins)
 	coins.setup(self)
+	critters = CritterManager.new()
+	add_child(critters)
+	critters.setup(self, actors)
 	projectiles = ProjectileManager.new()
 	add_child(projectiles)
 	projectiles.setup(self)

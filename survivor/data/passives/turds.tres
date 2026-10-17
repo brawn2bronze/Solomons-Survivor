@@ -46,3 +46,7 @@ level_scaling = {
 "stun": ["mul", 1.05]
 }
 color = Color(0.1682041, 0.33829832, 0.11255523, 1)
+icon = "res://art/passives/turd.png"
+icon_frames = 1
+icon_fps = 8.0
+preview_kind = "static"

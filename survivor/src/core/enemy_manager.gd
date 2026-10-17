@@ -265,6 +265,8 @@ func spawn(def, pos: Vector2, hp_mult: float = 1.0, dmg_mult: float = 1.0):
     active.append(e)
     if e.is_elite:
         elites.append(e)
+    if world != null and world.fx != null:
+        world.fx.summon(e.pos, def.sprite_scale)
     return e
 
 

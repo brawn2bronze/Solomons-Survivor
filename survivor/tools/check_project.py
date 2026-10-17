@@ -14,9 +14,9 @@ def rp(p): return os.path.join(ROOT, p.replace("res://", ""))
 SPEC_AUDIO = """weapons/revolver_shot.wav weapons/katana_slash.wav weapons/hand_cannon.wav weapons/whip_crack.wav weapons/greatsword_swing.wav
 weapons/lightning_bolt.wav weapons/fang_bite.wav weapons/horn_swipe.wav weapons/screech.wav weapons/skull_projectile.wav weapons/goose_charge.wav
 enemies/goblin_hit.wav enemies/skeleton_hit.wav enemies/dragon_hit.wav enemies/dinosaur_hit.wav enemies/enemy_death.wav enemies/elite_enemy_spawn.wav
-player/player_hit.wav player/player_death.wav player/xp_pickup.wav player/level_up.wav player/character_select.wav
+player/player_hit.wav player/player_death.wav player/xp_pickup.wav player/level_up.wav player/character_select.wav player/frog-fart.wav
 music/ambient_loop.ogg music/boss_music.ogg music/menu_music.ogg
-ui/button_click.wav ui/menu_open.wav ui/menu_close.wav ui/upgrade_selected.wav""".split()
+ui/button_click.wav ui/menu_open.wav ui/menu_close.wav ui/upgrade_selected.wav ui/market_unlock.wav ui/market_purchase.wav""".split()
 
 def wrapped_cast(rhs):
     m = re.match(r'(float|int|bool|String|Vector2|Vector2i|Color|Rect2|clampf|clampi|maxf|maxi|minf|mini|absf|lerpf|sqrt|floori|ceili)\(', rhs)
