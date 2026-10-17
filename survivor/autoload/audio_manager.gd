@@ -180,6 +180,17 @@ func music(key: String, fade: float = 1.0) -> void:
         t2.tween_callback(outgoing.stop)
 
 
+## Latency-compensated playback position (seconds) of the audible music track, or -1.0 if none is playing.
+## The title screen reads this to sync its visuals to the song (see MenuMusicCurve).
+func music_time() -> float:
+    var p: AudioStreamPlayer = _music_a
+    if not _music_a.playing or (_music_b.playing and _music_b.volume_db > _music_a.volume_db):
+        p = _music_b
+    if not p.playing:
+        return -1.0
+    return maxf(0.0, p.get_playback_position() + AudioServer.get_time_since_last_mix() - AudioServer.get_output_latency())
+
+
 func stop_music(fade: float = 0.6) -> void:
     _music_key = ""
     for p in [_music_a, _music_b]:
