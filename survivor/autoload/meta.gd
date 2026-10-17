@@ -210,12 +210,12 @@ func unlock_market() -> bool:
     return true
 
 
-## Menu hint while locked, built from whichever EnemyDef carries the unlock.
+## Menu hint while locked, built from the act whose boss carries the unlock.
 func unlock_hint() -> String:
-    for def in DB.enemies.values():
-        if String(def.boss_unlock) == UNLOCK_MARKET:
-            var secs: int = int(def.boss_time)
-            return "Slay %s (%02d:%02d) to unlock" % [def.display_name, secs / 60, secs % 60]
+    for act in DB.acts:
+        var boss = DB.enemies.get(String(act.boss_id))
+        if boss != null and String(boss.boss_unlock) == UNLOCK_MARKET:
+            return "Defeat %s to end %s" % [boss.display_name, act.display_name]
     return "Defeat the boss to unlock"
 
 

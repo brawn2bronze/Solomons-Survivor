@@ -5,7 +5,7 @@ extends Node2D
 
 const MAX := 360
 
-enum Kind { BULLET, CANNON, SHRAPNEL, WAVE, SKULL, HOLY, HOSTILE, SHURIKEN }
+enum Kind { BULLET, CANNON, SHRAPNEL, WAVE, SKULL, HOLY, HOSTILE, SHURIKEN, ZONE }
 
 class Pr:
     var alive := false
@@ -33,6 +33,7 @@ class Pr:
     var splash_r := 0.0           # hostile: AoE burst when it expires near the player (0 = off)
     var splash_dmg := 0.0
     var splash_falloff := false
+    var zone_target := 0.0        # ZONE: disc radius it grows to before popping
     var skin := {}                # weapon FX skin (AbilityArt.weapon_proj_skin); {} / fallback = procedural head
 
 var world
@@ -73,6 +74,7 @@ func _take():
     p.splash_r = 0.0
     p.splash_dmg = 0.0
     p.splash_falloff = false
+    p.zone_target = 0.0
     p.skin = {}
     p.w = 0.0
     p.spin = randf() * TAU
@@ -121,6 +123,9 @@ func spawn_hostile(pos: Vector2, vel: Vector2, dmg: float, air: bool, opts: Dict
     if String(opts.get("style", "")) == "fireball":
         p.radius = 6.0
         p.color = Color(1.0, 0.6, 0.1)
+    elif String(opts.get("style", "")) == "bone":
+        p.radius = 5.0
+        p.color = Color(0.93, 0.9, 0.8)
     else:
         p.radius = 5.0
         p.color = Color(1.0, 0.45, 0.2)
@@ -129,6 +134,26 @@ func spawn_hostile(pos: Vector2, vel: Vector2, dmg: float, air: bool, opts: Dict
     p.splash_r = float(opts.get("splash_radius", 0.0))
     p.splash_dmg = float(opts.get("splash_damage", 0.0))
     p.splash_falloff = bool(opts.get("splash_falloff", false))
+    for i in p.trail.size():
+        p.trail[i] = pos
+
+
+## Ground danger disc (Bone Broker Hellfire Wells, Act III hazards): grows to
+## zone_target over `delay` seconds, then pops — damaging the player only if
+## inside the radius at that moment. Never hits enemies, never trails.
+func spawn_zone(pos: Vector2, radius: float, dmg: float, delay: float, opts: Dictionary = {}) -> void:
+    var p: Pr = _take()
+    if p == null:
+        return
+    p.kind = Kind.ZONE
+    p.pos = pos
+    p.vel = Vector2.ZERO
+    p.dmg = dmg
+    p.radius = 1.0
+    p.zone_target = radius
+    p.life = maxf(delay, 0.05)
+    p.color = opts.get("color", Color(0.9, 0.4, 0.15))
+    p.air = bool(opts.get("air", false))
     for i in p.trail.size():
         p.trail[i] = pos
 
@@ -150,7 +175,17 @@ func _process(delta: float) -> void:
             p.trail[k] = p.trail[k + 1]
         p.trail[p.trail.size() - 1] = p.pos
         var dead := p.life <= 0.0
-        if not dead:
+        if p.kind == Kind.ZONE:
+            # growing-disc telegraph; grows toward zone_target over its life
+            var total: float = p.life + p.age
+            if total > 0.0:
+                p.radius = p.zone_target * clampf(p.age / total, 0.0, 1.0)
+            if dead:
+                world.fx.ring(p.pos, p.radius * 0.6, p.radius, 0.22, p.color, 3.0)
+                world.fx.hit_sparks(p.pos, Vector2.UP, p.color, 8)
+                if p.pos.distance_to(world.player.global_position) <= p.radius:
+                    world.player.take_damage(p.dmg, p.air, "Hellfire")
+        elif not dead:
             if p.kind == Kind.HOSTILE:
                 if p.pos.distance_squared_to(world.player.global_position) < 14.0 * 14.0:
                     world.player.take_damage(p.dmg, p.air, "Projectile")
@@ -254,7 +289,7 @@ func _draw() -> void:
             Kind.HOSTILE: tw = 4.0
         var sk: Dictionary = p.skin if p.skin is Dictionary else {}
         var hide_trail: bool = not sk.is_empty() and not bool(sk.get("fallback", true)) and not bool(sk.get("trail", true))
-        if p.kind != Kind.WAVE and p.kind != Kind.HOLY and not hide_trail:
+        if p.kind != Kind.WAVE and p.kind != Kind.HOLY and p.kind != Kind.ZONE and not hide_trail:
             for k in range(n - 1):
                 var f := float(k + 1) / float(n)
                 var tc := c
@@ -302,3 +337,10 @@ func _draw() -> void:
                         var ac := c
                         ac.a = life_k * (0.75 - ring_i * 0.2)
                         draw_arc(p.pos - p.vel.normalized() * ring_i * 5.0, rr, dir - p.w, dir + p.w, 14, ac, 2.5 - ring_i * 0.5)
+            Kind.ZONE:
+                # hellfire well: growing filled disc, brighter + pulsing toward the pop
+                var k := clampf(p.radius / maxf(p.zone_target, 1.0), 0.0, 1.0)
+                var pulse := 1.0 + 0.12 * sin(p.age * 18.0) * k
+                draw_circle(p.pos, p.radius * pulse, Color(c.r, c.g, c.b, 0.16 + 0.2 * k))
+                draw_arc(p.pos, p.radius * pulse, 0.0, TAU, 28, Color(c.r, c.g, c.b, 0.55 + 0.35 * k), 2.5)
+                draw_arc(p.pos, p.radius * pulse * 0.72, 0.0, TAU, 22, Color(1.0, 0.85, 0.5, 0.18 + 0.3 * k), 1.5)

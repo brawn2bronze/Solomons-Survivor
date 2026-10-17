@@ -23,6 +23,13 @@ def val(v):
     return json.dumps(v, ensure_ascii=False)
 
 
+# Window rescale x0.75 (40-min plan -> 30-min plan). 9999 is "stays available
+# forever" and must not be scaled. Applies to non-boss enemy defs only; bosses
+# are hand-authored in their own .tres files.
+def _window(v):
+    return float(v) if float(v) >= 9999 else round(float(v) * 0.75, 3)
+
+
 def emit(kind, cls, script, rid, fields):
     d = os.path.join(ROOT, "data", kind); os.makedirs(d, exist_ok=True)
     lines = [f'[gd_resource type="Resource" script_class="{cls}" load_steps=2 format=3]', "",
@@ -369,7 +376,7 @@ def main():
             id=e["id"], display_name=e["name"], family=e["family"], max_hp=float(e["hp"]), speed=float(e["speed"]), contact_damage=float(e["damage"]), xp=e["xp"],
             radius=float(e["radius"]), sprite=f"res://art/enemies/{e['sprite']}.png", frames=e["frames"], behavior=e["behavior"], height=e["height"],
             is_elite=e["elite"], can_hit_flying=e.get("can_hit_flying", False), hit_event=e["hit"], sprite_scale=e["scale"], spawn_weight=e["weight"],
-            spawn_start=float(e["start"]), spawn_end=float(e["end"]), elite_every=float(e.get("elite_every", 0)),
+            spawn_start=_window(e["start"]), spawn_end=_window(e["end"]), elite_every=float(e.get("elite_every", 0)),
             shoot_interval=float(e.get("shoot_interval", 0)), shoot_speed=float(e.get("shoot_speed", 0)), shoot_damage=float(e.get("shoot_damage", 0))))
     for u in UPGRADES:
         emit("upgrades", "UpgradeDef", "upgrade_def.gd", u["id"], dict(

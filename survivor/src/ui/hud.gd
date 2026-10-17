@@ -234,7 +234,11 @@ func _process(delta: float) -> void:
     if pl.armor > 0.0 and pl.passive != null:
         armor_bar.value = clampf(pl.armor / maxf(1.0, float(pl.passive.p.get("armor_hp", 1.0))), 0.0, 1.0)
     var secs := int(world.run_time)
-    _set_text(time_label, "%02d:%02d" % [secs / 60, secs % 60])
+    _set_text(time_label, "%s  %02d:%02d" % [_act_numeral(), secs / 60, secs % 60])
+    if world.acts != null and world.acts.clock_held:
+        time_label.modulate = Color(1.0, 0.5, 0.45, 0.55 + 0.45 * sin(Time.get_ticks_msec() * 0.006))
+    else:
+        time_label.modulate = Color.WHITE
     _set_text(kills_label, "%d kills" % pl.kills)
     _set_text(coin_label, str(world.run_coins))
     _update_slot(slots[0], pl.weapon)
@@ -283,6 +287,18 @@ func _process(delta: float) -> void:
         _debug = false
     if debug_label.visible:
         _set_text(debug_label, "%d FPS   enemies %d   proj %d   gems %d" % [Engine.get_frames_per_second(), world.enemies.alive_count(), world.projectiles.live.size(), world.gems.live.size()])
+
+
+## Roman numeral for the current act (falls back to its display_name). Empty when no director.
+func _act_numeral() -> String:
+    if world == null or world.acts == null:
+        return ""
+    var act = world.acts.current()
+    if act == null:
+        return ""
+    var rom := ["I", "II", "III", "IV", "V", "VI"]
+    var i: int = int(act.index)
+    return rom[i] if i >= 0 and i < rom.size() else String(act.display_name)
 
 
 ## _process runs every frame: assigning Label.text forces a Control relayout even

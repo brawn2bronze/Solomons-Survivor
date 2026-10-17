@@ -16,7 +16,9 @@ weapons/lightning_bolt.wav weapons/fang_bite.wav weapons/horn_swipe.wav weapons/
 enemies/goblin_hit.wav enemies/skeleton_hit.wav enemies/dragon_hit.wav enemies/dinosaur_hit.wav enemies/enemy_death.wav enemies/elite_enemy_spawn.wav
 player/player_hit.wav player/player_death.wav player/xp_pickup.wav player/level_up.wav player/character_select.wav player/frog-fart.wav
 music/ambient_loop.ogg music/boss_music.ogg music/menu_music.ogg
+music/act1_orchestral.ogg music/act2_glitch.ogg music/act3_choir.ogg music/act4_lucifer.ogg
 ui/button_click.wav ui/menu_open.wav ui/menu_close.wav ui/upgrade_selected.wav ui/market_unlock.wav ui/market_purchase.wav""".split()
+MUSIC_ALLOW_MISSING = {"music/act4_lucifer.ogg"}   # Act IV track not authored yet; missing-file warning path only
 
 def wrapped_cast(rhs):
     m = re.match(r'(float|int|bool|String|Vector2|Vector2i|Color|Rect2|clampf|clampi|maxf|maxi|minf|mini|absf|lerpf|sqrt|floori|ceili)\(', rhs)
@@ -35,14 +37,17 @@ all_text = {f: open(f, encoding="utf-8").read() for f in gd_files + tres_files +
 
 # ---- 1. audio spec ---------------------------------------------------------------------------
 for a in SPEC_AUDIO:
+    if a in MUSIC_ALLOW_MISSING:
+        continue
     if not os.path.exists(os.path.join(ROOT, "audio", a)):
         err(f"audio spec file missing: res://audio/{a}")
 am = open(ROOT + "/autoload/audio_manager.gd").read()
 events = dict(re.findall(r'"(\w+)":\s*"(res://audio/[^"]+)"', am.split("const MUSIC")[0]))
 music = dict(re.findall(r'"(\w+)":\s*"(res://audio/[^"]+)"', am.split("const MUSIC")[1].split("const MIN_GAP")[0]))
 for k, p in {**events, **music}.items():
-    if not os.path.exists(rp(p)): err(f"AudioManager path missing on disk: {p}")
-    if p.replace("res://audio/", "") not in SPEC_AUDIO: err(f"AudioManager path not in spec: {p}")
+    rel = p.replace("res://audio/", "")
+    if rel not in MUSIC_ALLOW_MISSING and not os.path.exists(rp(p)): err(f"AudioManager path missing on disk: {p}")
+    if rel not in SPEC_AUDIO: err(f"AudioManager path not in spec: {p}")
 for a in SPEC_AUDIO:
     if "res://audio/" + a not in {**events, **music}.values(): err(f"spec path not wired in AudioManager: {a}")
 for f, t in all_text.items():
@@ -134,6 +139,28 @@ for eid, e in enemies.items():
     if num("spiral_cast_time", "0.75") <= 0 or num("spiral_fire_interval", "0.03") <= 0: err(f"{eid}: spiral cast/interval must be > 0")
     if num("spiral_projectile_speed") < 0 or num("spiral_projectile_range") < 0 or num("spiral_splash_radius") < 0 or num("spiral_splash_damage") < 0: err(f"{eid}: spiral fields must be >= 0")
     if not 0.0 < num("enrage_hp_fraction", "0.4") < 1.0 or num("enrage_interval_mult", "0.7") <= 0: err(f"{eid}: enrage_hp_fraction must be 0-1, enrage_interval_mult > 0")
+# ---- 3c. act data + director fields ----------------------------------------------------------
+def numf(d, k, default="0"):
+    try: return float(d.get(k, default).strip())
+    except ValueError: return 0.0
+acts = {os.path.basename(p)[:-5]: parse_tres(p) for p in glob.glob(ROOT + "/data/acts/*.tres")}
+if len(acts) < 4: err(f"expected 4 acts, found {len(acts)}")
+prev_clock = -1.0
+for aid in sorted(acts, key=lambda k: numf(acts[k], "index")):
+    a = acts[aid]
+    cs = numf(a, "clock_start")
+    if cs <= prev_clock: err(f"{aid}: clock_start must increase ({cs} <= {prev_clock})")
+    prev_clock = cs
+    bid = a.get("boss_id", "").strip('"')
+    sealed = a.get("sealed", "false").strip() == "true"
+    if bid and bid not in enemies and not sealed: err(f"{aid}: boss_id '{bid}' has no EnemyDef (sealed acts may omit)")
+    mk = a.get("music_key", "").strip('"')
+    if mk and mk not in music: err(f"{aid}: music_key '{mk}' not in AudioManager.MUSIC")
+for eid, e in enemies.items():
+    if e.get("behavior", "").strip('"') == "boss_broker":
+        if "fan" not in e.get("deck", ""): err(f"{eid}: boss_broker needs a non-empty deck")
+        if numf(e, "recover_time", "0") <= 0: err(f"{eid}: recover_time must be > 0")
+        if numf(e, "add_cap", "0") <= 0: err(f"{eid}: add_cap must be > 0")
 for cid, c in chars.items():
     sp = c["sprite"].strip('"'); im = Image.open(rp(sp))
     frames = int(c.get("frames", "6").strip()) if "frames" in c else 6

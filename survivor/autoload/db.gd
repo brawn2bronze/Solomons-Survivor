@@ -8,6 +8,7 @@ var passives: Dictionary = {}
 var enemies: Dictionary = {}
 var upgrades: Dictionary = {}
 var market: Dictionary = {}        # Black Market listings (MarketItemDef), by id
+var acts: Array = []                # ActDef slices, sorted by index (data/acts)
 var _tex: Dictionary = {}
 
 
@@ -18,7 +19,11 @@ func _ready() -> void:
     _scan("res://data/enemies", enemies)
     _scan("res://data/upgrades", upgrades)
     _scan("res://data/market", market)
-    print("DB: %d characters, %d weapons, %d passives, %d enemies, %d upgrades, %d market listings" % [characters.size(), weapons.size(), passives.size(), enemies.size(), upgrades.size(), market.size()])
+    var acts_by_id: Dictionary = {}
+    _scan("res://data/acts", acts_by_id)
+    acts = acts_by_id.values()
+    acts.sort_custom(func(a, b): return a.index < b.index)
+    print("DB: %d characters, %d weapons, %d passives, %d enemies, %d upgrades, %d market listings, %d acts" % [characters.size(), weapons.size(), passives.size(), enemies.size(), upgrades.size(), market.size(), acts.size()])
 
 
 func _scan(dir_path: String, into: Dictionary) -> void:

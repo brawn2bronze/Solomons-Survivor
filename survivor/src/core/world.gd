@@ -8,13 +8,16 @@ const LIGHT_SHADER := """
 shader_type canvas_item;
 uniform float hurt : hint_range(0.0, 1.0) = 0.0;
 uniform vec4 flash_color : source_color = vec4(0.0);
+uniform vec4 base_tint : source_color = vec4(0.015, 0.02, 0.06, 1.0);
+uniform vec4 edge_glow : source_color = vec4(0.0);
 void fragment() {
     vec2 uv = UV - vec2(0.5);
     uv.x *= 1.7778;
     float d = length(uv);
     float vig = smoothstep(0.38, 1.0, d);
     float a = vig * 0.74 + 0.06;
-    vec3 tint = mix(vec3(0.015, 0.02, 0.06), vec3(0.75, 0.04, 0.05), clamp(hurt * vig * 1.6, 0.0, 1.0));
+    vec3 tint = mix(base_tint.rgb, vec3(0.75, 0.04, 0.05), clamp(hurt * vig * 1.6, 0.0, 1.0));
+    tint = mix(tint, edge_glow.rgb, clamp(edge_glow.a * vig, 0.0, 1.0));
     a = clamp(a + hurt * vig * 0.55, 0.0, 0.96);
     COLOR = vec4(tint, a);
     COLOR = mix(COLOR, vec4(flash_color.rgb, 1.0), flash_color.a);
@@ -38,6 +41,9 @@ var levelup: LevelUpScreen
 var pause_menu: PauseMenu
 var gameover: GameOverScreen
 var light_mat: ShaderMaterial
+var acts: ActManager
+var act_ambient: ActAmbient
+var act_banner: ActBanner
 var sim_running := false
 var run_time := 0.0
 var no_gems := false      # in-game sandbox lock: enemies drop nothing
@@ -63,6 +69,10 @@ var _flash := Color(0, 0, 0, 0)
 var _flash_rate := 3.0      # alpha lost per second by the current screen flash
 var _music_key := ""
 var _music_t := 0.0
+var _tint_cur := Color(0.015, 0.02, 0.06, 1.0)
+var _tint_tgt := Color(0.015, 0.02, 0.06, 1.0)
+var _vignette_pulse := 0.0
+var _edge_col := Color(0, 0, 0, 0)
 var _over := false
 
 
@@ -80,6 +90,9 @@ func start(char_id: String) -> void:
 	player = Player.new()
 	actors.add_child(player)
 	player.setup(self, DB.characters[char_id])
+	acts = ActManager.new()
+	add_child(acts)
+	acts.setup(self)
 	gems = GemManager.new()
 	add_child(gems)
 	gems.setup(self)
@@ -126,6 +139,11 @@ func start(char_id: String) -> void:
 	hud = Hud.new()
 	add_child(hud)
 	hud.setup(self)
+	act_ambient = ActAmbient.new()
+	add_child(act_ambient)
+	act_ambient.setup(self)
+	act_banner = ActBanner.new()
+	add_child(act_banner)
 	levelup = LevelUpScreen.new()
 	add_child(levelup)
 	levelup.chosen.connect(_on_choice)
@@ -161,6 +179,14 @@ func start(char_id: String) -> void:
 	if stock > 0:
 		intro += "  -  FATE: %d REROLL / %d SKIP / %d BANISH" % [stock, stock, stock]
 	announce(intro, Game.dev_active)
+	# Act director: normal runs start at act 1 with the clock reset; dev jump-ins
+	# derive the act from the seeded clock and keep it. First activation is instant.
+	var start_idx := 0
+	var set_clock := true
+	if Game.dev_active:
+		start_idx = acts.act_for_time(run_time)
+		set_clock = false
+	acts.begin_act(start_idx, set_clock, true)
 
 
 ## Foreseen Victory placeholder pool: hardcoded stat deltas (no mod registry yet).
@@ -341,10 +367,21 @@ func _process(delta: float) -> void:
 	light_mat.set_shader_parameter("hurt", clampf(maxf(_hurt, low), 0.0, 1.0))
 	_flash.a = maxf(0.0, _flash.a - delta * _flash_rate)
 	light_mat.set_shader_parameter("flash_color", _flash)
+	_tint_cur = _tint_cur.lerp(_tint_tgt, clampf(delta * 1.5, 0.0, 1.0))
+	light_mat.set_shader_parameter("base_tint", _tint_cur)
+	var eg := Color(0, 0, 0, 0)
+	if _vignette_pulse > 0.0:
+		var s := 0.5 + 0.5 * sin(Time.get_ticks_msec() * 0.001 * TAU * _vignette_pulse)
+		eg = Color(_edge_col.r, _edge_col.g, _edge_col.b, 0.10 + 0.22 * s)
+	light_mat.set_shader_parameter("edge_glow", eg)
 	_music_t -= delta
 	if _music_t <= 0.0 and sim_running:
 		_music_t = 1.0
-		_set_music("boss_music" if not enemies.elites.is_empty() else "ambient_loop")
+		var mact = acts.current() if acts != null else null
+		if mact != null:
+			_set_music(mact.boss_music_key if enemies.boss_alive() else mact.music_key)
+		else:
+			_set_music("ambient_loop")
 
 
 func _unhandled_input(event: InputEvent) -> void:
@@ -353,10 +390,32 @@ func _unhandled_input(event: InputEvent) -> void:
 		get_viewport().set_input_as_handled()
 
 
-func _set_music(key: String) -> void:
+func _set_music(key: String, fade := 1.2) -> void:
 	if key != _music_key:
 		_music_key = key
-		Audio.music(key, 1.2)
+		if key == "":
+			Audio.stop_music(fade)
+		else:
+			Audio.music(key, fade)
+
+
+## Apply an act's arena theme: floor/brazier palette (instant = no floor tween),
+## vignette tint tween, ambient wash, Act IV edge pulse, and a live enemy re-tint.
+## Called from ActManager.begin_act on every act change.
+func set_arena_theme(act: ActDef, instant: bool) -> void:
+	if act == null:
+		return
+	if ground != null:
+		ground.apply_theme(act, instant)
+	_tint_tgt = act.vignette_tint
+	if instant:
+		_tint_cur = _tint_tgt
+	_vignette_pulse = act.vignette_pulse
+	_edge_col = act.flame_glow
+	if act_ambient != null:
+		act_ambient.set_act(act, instant)
+	if enemies != null:
+		enemies._on_act_changed(acts.idx if acts != null else 0)
 
 
 # ------------------------------------------------------------------ hooks used by other systems
@@ -396,6 +455,12 @@ func on_kill(e) -> void:
 		cw.on_kill(e)
 	if String(e.def.boss_unlock) != "":
 		_on_boss_defeated(e)
+	elif float(e.def.boss_time) > 0.0:
+		announce("SLAIN", false)
+	# Unique act boss: only the boss the director is currently holding advances
+	# the act (Phase-2 shim auto-advances; dev-spawned bosses never trigger it).
+	if acts != null and acts.held_boss_id == String(e.def.id):
+		acts.boss_slain(e.def)
 
 
 ## A unique boss died: grant its meta unlock (the Forbidden Archive) and announce it. The fragment jackpot comes from CoinManager.

@@ -53,3 +53,21 @@ extends Resource
 @export var spiral_splash_damage: float = 0.0
 @export var enrage_hp_fraction: float = 0.4
 @export var enrage_interval_mult: float = 0.7
+## Boss attack deck (bone_broker, behavior "boss_broker"): a shuffled list of attack kinds,
+## never the same twice in a row. Kinds: fan | ledger | gap_ring | foreclose (summon is injected
+## separately when adds are available). Defaults do nothing for other defs.
+@export var deck: PackedStringArray = PackedStringArray()
+@export var fan_bursts: int = 3
+@export var fan_burst_gap: float = 0.14
+@export var zone_count: int = 6
+@export var zone_radius: float = 34.0
+@export var zone_damage: float = 28.0
+@export var zone_delay: float = 0.9
+@export var ring_bullets: int = 24
+@export var ring_gaps: int = 3
+@export var add_def_id: String = ""
+@export var add_count: int = 4
+@export var add_cap: int = 8
+@export var add_interval: float = 14.0
+@export var recover_time: float = 0.9
+@export var tint: Color = Color.WHITE    ## multiplicative resting-modulate tint

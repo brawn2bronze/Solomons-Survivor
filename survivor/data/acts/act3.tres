@@ -1,0 +1,34 @@
+[gd_resource type="Resource" script_class="ActDef" load_steps=2 format=3]
+
+[ext_resource type="Script" path="res://data/defs/act_def.gd" id="1_s"]
+
+[resource]
+script = ExtResource("1_s")
+id = "act3"
+index = 2
+display_name = "ACT III"
+title = "THE BRAZIER HALLS"
+subtitle = "Something is burning the old oaths."
+clock_start = 900.0
+boss_id = "belial"
+sealed = false
+music_key = "act3_choir"
+boss_music_key = "boss_music"
+hp_mult = 1.2
+dmg_mult = 1.2
+speed_mult = 1.08
+spawn_rate_mult = 1.2
+reward_mult = 2.2
+elite_cooldown = 30.0
+floor_a = Color(0.17, 0.07, 0.09, 1)
+floor_b = Color(0.23, 0.09, 0.11, 1)
+crack_col = Color(0.07, 0.02, 0.03, 1)
+flame_core = Color(1, 0.3, 0.2, 1)
+flame_glow = Color(1, 0.3, 0.2, 1)
+glow_col = Color(1, 0.3, 0.2, 1)
+brazier_bonus = 0.6
+vignette_tint = Color(0.07, 0.01, 0.02, 1)
+vignette_pulse = 0.0
+enemy_tint = Color(1.0, 0.92, 0.9, 1)
+ambient = "embers"
+intro_flash = Color(0.8, 0.2, 0.15, 0.12)

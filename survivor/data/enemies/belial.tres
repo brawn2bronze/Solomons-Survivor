@@ -1,0 +1,42 @@
+[gd_resource type="Resource" script_class="EnemyDef" load_steps=2 format=3]
+
+[ext_resource type="Script" path="res://data/defs/enemy_def.gd" id="1_s"]
+
+[resource]
+script = ExtResource("1_s")
+id = "belial"
+display_name = "Belial, Prince of Braziers"
+family = "goblin"
+max_hp = 9500.0
+speed = 52.0
+contact_damage = 45.0
+xp = 500
+radius = 28.0
+sprite = "res://art/enemies/goblin_brute.png"
+frames = 4
+behavior = "boss"
+height = 0
+is_elite = true
+can_hit_flying = true
+hit_event = "goblin_hit"
+sprite_scale = 3.0
+spawn_weight = 0.0
+spawn_start = 1350.0
+spawn_end = 9999.0
+elite_every = 0.0
+shoot_interval = 2.2
+shoot_speed = 180.0
+shoot_damage = 26.0
+boss_time = 1350.0
+boss_unlock = ""
+coin_drop = 220
+tint = Color(1, 0.45, 0.4, 1)
+projectile_style = "fireball"
+projectile_count = 5
+projectile_spread_deg = 50.0
+splash_radius = 40.0
+splash_damage = 20.0
+splash_falloff = true
+spiral_every = 0
+enrage_hp_fraction = 0.5
+enrage_interval_mult = 0.7

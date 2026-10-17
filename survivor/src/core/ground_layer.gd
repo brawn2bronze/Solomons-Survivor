@@ -15,6 +15,10 @@ var _turd_tex: Texture2D
 var _blast_tex: Dictionary = {}
 var glow_layer: GroundGlow
 var _time := 0.0
+var _act: ActDef = null             # act whose colors the flames/glow currently use
+var _floor_cache: Dictionary = {}   # act id -> ImageTexture (4 x 128x128, one-shot)
+var _floor_prev: ImageTexture       # crossfade source (drawn under the new floor)
+var _floor_fade := 1.0              # 0..1, new floor alpha
 
 
 class GroundGlow extends Node2D:
@@ -26,7 +30,7 @@ class GroundGlow extends Node2D:
 
 
 func _ready() -> void:
-    floor_tex = _make_floor()
+    floor_tex = _make_floor(_base_palette())
     shadow_tex = _make_shadow()
     glow_layer = GroundGlow.new()
     glow_layer.ground = self
@@ -36,6 +40,19 @@ func _ready() -> void:
     add_child(glow_layer)
 
 
+## Fallback palette before the first act (matches Act I violet).
+func _base_palette() -> Dictionary:
+    if not DB.acts.is_empty() and world != null and world.acts != null:
+        var act = world.acts.current()
+        if act != null:
+            return _act_palette(act)
+    return {"a": Color(0.14, 0.1, 0.2), "b": Color(0.18, 0.12, 0.26), "crack": Color(0.05, 0.03, 0.09)}
+
+
+func _act_palette(act: ActDef) -> Dictionary:
+    return {"a": act.floor_a, "b": act.floor_b, "crack": act.crack_col}
+
+
 static func _hash(x: int, y: int) -> int:
     var n: int = (x * 73856093) ^ (y * 19349663)
     n = (n ^ (n >> 13)) * 1274126177
@@ -43,7 +60,12 @@ static func _hash(x: int, y: int) -> int:
     return n & 0x7fffffff
 
 
-func _make_floor() -> ImageTexture:
+## Same RNG seed every call, so prop geometry stays identical across acts —
+## only the palette changes.
+func _make_floor(pal: Dictionary) -> ImageTexture:
+    var a: Color = pal["a"]
+    var b: Color = pal["b"]
+    var crack: Color = pal["crack"]
     var img := Image.create(TILE, TILE, false, Image.FORMAT_RGBA8)
     var rng := RandomNumberGenerator.new()
     rng.seed = 90210
@@ -51,8 +73,8 @@ func _make_floor() -> ImageTexture:
     for sy in range(TILE / stone):
         for sx in range(TILE / stone):
             var off := 16 if sy % 2 == 1 else 0
-            var base := Color(0.14, 0.1, 0.2).lerp(Color(0.18, 0.12, 0.26), rng.randf())
-            base = base.lerp(Color(0.16, 0.1, 0.24), 0.25 if rng.randf() < 0.18 else 0.0)   # tainted stones
+            var base := a.lerp(b, rng.randf())
+            base = base.lerp(a.lerp(b, 0.5), 0.25 if rng.randf() < 0.18 else 0.0)   # tainted stones
             for y in stone:
                 for x in stone:
                     var px := (sx * stone + x + off) % TILE
@@ -72,10 +94,32 @@ func _make_floor() -> ImageTexture:
         var x := rng.randi_range(0, TILE - 1)
         var y := rng.randi_range(0, TILE - 1)
         for step in rng.randi_range(6, 16):
-            img.set_pixel(x % TILE, y % TILE, Color(0.05, 0.03, 0.09))
+            img.set_pixel(x % TILE, y % TILE, crack)
             x += rng.randi_range(-1, 1) + 1
             y += rng.randi_range(0, 1)
     return ImageTexture.create_from_image(img)
+
+
+## Act transition: build/cache the act's floor texture and crossfade over 4s
+## (previous floor at full alpha, new floor rising). instant = hard swap.
+func apply_theme(act: ActDef, instant: bool) -> void:
+    _act = act
+    var pal := _act_palette(act)
+    var tex: ImageTexture = _floor_cache.get(act.id)
+    if tex == null:
+        tex = _make_floor(pal)
+        _floor_cache[act.id] = tex
+    if instant or floor_tex == null:
+        floor_tex = tex
+        _floor_prev = null
+        _floor_fade = 1.0
+    else:
+        _floor_prev = floor_tex
+        floor_tex = tex
+        _floor_fade = 0.0
+    queue_redraw()
+    if glow_layer != null:
+        glow_layer.queue_redraw()
 
 
 func _make_shadow() -> ImageTexture:
@@ -93,6 +137,10 @@ func _make_shadow() -> ImageTexture:
 
 func _process(delta: float) -> void:
     _time += delta
+    if _floor_fade < 1.0:
+        _floor_fade = minf(1.0, _floor_fade + delta / 4.0)
+        if _floor_fade >= 1.0:
+            _floor_prev = null
     queue_redraw()
     if glow_layer != null:
         glow_layer.queue_redraw()
@@ -110,7 +158,12 @@ func _draw() -> void:
     # floor
     var o := Vector2(floorf(vr.position.x / TILE) * TILE, floorf(vr.position.y / TILE) * TILE)
     var size := Vector2(ceilf(vr.size.x / TILE) + 1.0, ceilf(vr.size.y / TILE) + 1.0) * TILE
-    draw_texture_rect(floor_tex, Rect2(o, size), true)
+    # floor (crossfade: previous floor at full alpha, new floor rising)
+    if _floor_prev != null:
+        draw_texture_rect(_floor_prev, Rect2(o, size), true)
+        draw_texture_rect(floor_tex, Rect2(o, size), true, Color(1, 1, 1, _floor_fade))
+    else:
+        draw_texture_rect(floor_tex, Rect2(o, size), true)
     # props
     var cx0 := floori(vr.position.x / CHUNK)
     var cx1 := floori(vr.end.x / CHUNK)
@@ -135,10 +188,31 @@ func _shadow(pos: Vector2, s: float, lift: float) -> void:
     draw_texture_rect(shadow_tex, Rect2(pos + Vector2(-w * 0.5, -h * 0.5 + 1.0 + lift * 0.6), Vector2(w, h)), false)
 
 
+## Braziers: the fixed r % 11 == 5 residue, plus bonus hash residues when the
+## act sets brazier_bonus (e.g. Act III's crimson halls). Shared by _prop and
+## draw_glow so a brazier always glows iff it draws a flame.
+func _is_brazier(r: int) -> bool:
+    if r % 11 == 5:
+        return true
+    var bonus: float = _act.brazier_bonus if _act != null else 0.0
+    return bonus > 0.0 and float((r >> 12) % 100) < bonus * 100.0
+
+
+func _flame_core() -> Color:
+    return _act.flame_core if _act != null else Color(0.6, 0.25, 1.0)
+
+
+func _flame_glow() -> Color:
+    return _act.flame_glow if _act != null else Color(0.55, 0.25, 1.0)
+
+
 func _prop(cx: int, cy: int) -> void:
     var r := _hash(cx, cy)
     var base := Vector2(cx * CHUNK, cy * CHUNK)
     var px := base + Vector2(float(r % 120) + 20.0, float((r >> 8) % 120) + 20.0)
+    if _is_brazier(r):
+        _draw_brazier(px, r)
+        return
     match r % 11:
         0, 1:                                                                     # bone pile
             for i in 5:
@@ -160,16 +234,20 @@ func _prop(cx: int, cy: int) -> void:
                 var s := float(3 + (r >> (i * 2)) % 4)
                 draw_colored_polygon(PackedVector2Array([q3 + Vector2(-s, 0), q3 + Vector2(-s * 0.4, -s), q3 + Vector2(s * 0.6, -s * 0.7), q3 + Vector2(s, 0)]), Color(0.2, 0.14, 0.28))
                 draw_line(q3 + Vector2(-s, 0), q3 + Vector2(-s * 0.4, -s), Color(0.32, 0.22, 0.42), 1.0)
-        5:                                                                        # brazier
-            draw_rect(Rect2(px + Vector2(-5, -2), Vector2(10, 7)), Color(0.18, 0.16, 0.2))
-            draw_rect(Rect2(px + Vector2(-6, -4), Vector2(12, 3)), Color(0.3, 0.27, 0.32))
-            draw_rect(Rect2(px + Vector2(-3, 5), Vector2(6, 3)), Color(0.12, 0.11, 0.14))
-            var f := sin(_time * 11.0 + float(r % 7)) * 1.5
-            draw_colored_polygon(PackedVector2Array([px + Vector2(-4, -4), px + Vector2(-1 + f * 0.3, -12 + f), px + Vector2(1, -8), px + Vector2(3 - f * 0.3, -14 - f), px + Vector2(4, -4)]), Color(0.6, 0.25, 1.0))
-            draw_colored_polygon(PackedVector2Array([px + Vector2(-2, -4), px + Vector2(0, -9 + f * 0.5), px + Vector2(2, -4)]), Color(0.95, 0.7, 1.0))
         6:                                                                        # fragment seep
             draw_circle(px, 9.0, Color(0.14, 0.08, 0.22, 0.55))
             draw_circle(px + Vector2(6, 3), 6.0, Color(0.18, 0.1, 0.28, 0.5))
+
+
+func _draw_brazier(px: Vector2, r: int) -> void:
+    draw_rect(Rect2(px + Vector2(-5, -2), Vector2(10, 7)), Color(0.18, 0.16, 0.2))
+    draw_rect(Rect2(px + Vector2(-6, -4), Vector2(12, 3)), Color(0.3, 0.27, 0.32))
+    draw_rect(Rect2(px + Vector2(-3, 5), Vector2(6, 3)), Color(0.12, 0.11, 0.14))
+    var f := sin(_time * 11.0 + float(r % 7)) * 1.5
+    var core := _flame_core()
+    var edge := core.lightened(0.35)
+    draw_colored_polygon(PackedVector2Array([px + Vector2(-4, -4), px + Vector2(-1 + f * 0.3, -12 + f), px + Vector2(1, -8), px + Vector2(3 - f * 0.3, -14 - f), px + Vector2(4, -4)]), core)
+    draw_colored_polygon(PackedVector2Array([px + Vector2(-2, -4), px + Vector2(0, -9 + f * 0.5), px + Vector2(2, -4)]), edge)
 
 
 func draw_glow(c: Node2D) -> void:
@@ -177,17 +255,18 @@ func draw_glow(c: Node2D) -> void:
         return
     var vr := _view_rect()
     vr = vr.grow(60.0)
+    var glow := _flame_glow()
     for cx in range(floori(vr.position.x / CHUNK), floori(vr.end.x / CHUNK) + 1):
         for cy in range(floori(vr.position.y / CHUNK), floori(vr.end.y / CHUNK) + 1):
             var r := _hash(cx, cy)
-            if r % 11 != 5:
+            if not _is_brazier(r):
                 continue
             var base := Vector2(cx * CHUNK, cy * CHUNK)
             var px := base + Vector2(float(r % 120) + 20.0, float((r >> 8) % 120) + 20.0) + Vector2(0, -6)
             var fl := 0.85 + 0.15 * sin(_time * 9.0 + float(r % 13)) + 0.06 * sin(_time * 23.0)
             for i in 6:
                 var rad := 120.0 * (1.0 - float(i) / 6.0) * fl
-                c.draw_circle(px, rad, Color(0.55, 0.25, 1.0, 0.028))
+                c.draw_circle(px, rad, Color(glow.r, glow.g, glow.b, 0.028))
     # decal glow: prayer aura on the player etc. handled by the player node itself
 
 

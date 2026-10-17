@@ -1,0 +1,34 @@
+[gd_resource type="Resource" script_class="ActDef" load_steps=2 format=3]
+
+[ext_resource type="Script" path="res://data/defs/act_def.gd" id="1_s"]
+
+[resource]
+script = ExtResource("1_s")
+id = "act1"
+index = 0
+display_name = "ACT I"
+title = "THE BONE MARKET"
+subtitle = "Every soul has a price."
+clock_start = 0.0
+boss_id = "bone_broker"
+sealed = false
+music_key = "act1_orchestral"
+boss_music_key = "boss_music"
+hp_mult = 1.0
+dmg_mult = 1.0
+speed_mult = 1.0
+spawn_rate_mult = 1.0
+reward_mult = 1.0
+elite_cooldown = 60.0
+floor_a = Color(0.14, 0.1, 0.2, 1)
+floor_b = Color(0.18, 0.12, 0.26, 1)
+crack_col = Color(0.05, 0.03, 0.09, 1)
+flame_core = Color(0.6, 0.25, 1, 1)
+flame_glow = Color(0.55, 0.25, 1, 1)
+glow_col = Color(0.55, 0.25, 1, 1)
+brazier_bonus = 0.0
+vignette_tint = Color(0.015, 0.02, 0.06, 1)
+vignette_pulse = 0.0
+enemy_tint = Color(1, 1, 1, 1)
+ambient = "ash"
+intro_flash = Color(0.35, 0.2, 0.7, 0.12)

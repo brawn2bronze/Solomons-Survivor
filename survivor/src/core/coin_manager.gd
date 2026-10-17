@@ -44,13 +44,20 @@ func on_enemy_killed(e) -> void:
     if world == null or world.no_gems:
         return
     var def: EnemyDef = e.def
+    var rmult := 1.0
+    if world.acts != null:
+        var act = world.acts.current()
+        if act != null:
+            rmult = maxf(1.0, float(act.reward_mult))
     if def.coin_drop > 0:
-        var each: int = maxi(1, ceili(float(def.coin_drop) / float(JACKPOT_PIECES)))
+        var total: int = maxi(1, int(round(float(def.coin_drop) * rmult)))
+        var each: int = maxi(1, ceili(float(total) / float(JACKPOT_PIECES)))
         _shower(e.pos, JACKPOT_PIECES, each)
         attract_all()
         return
     if def.is_elite:
-        _shower(e.pos, ELITE_PIECES, ELITE_VALUE)
+        var eeach: int = maxi(1, int(round(float(ELITE_VALUE) * rmult)))
+        _shower(e.pos, ELITE_PIECES, eeach)
         attract_all()
         return
     var luck: float = maxf(0.0, world.player.stat("luck"))
@@ -60,6 +67,7 @@ func on_enemy_killed(e) -> void:
     var value := 1
     if randf() < luck * LUCK_BONUS:
         value = 2
+    value = maxi(1, int(round(float(value) * rmult)))
     _spawn(e.pos, value, Vector2.from_angle(randf() * TAU) * randf_range(20.0, 50.0))
 
 
