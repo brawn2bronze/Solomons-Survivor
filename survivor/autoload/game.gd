@@ -2,6 +2,7 @@ extends Node
 ## Global run state, input map, and the "game feel" broker (hit-stop + screen shake requests).
 
 signal shake_requested(amount: float)
+signal touch_mode_changed
 
 # --- DEVELOPER MODE HARD TOGGLE -------------------------------------------
 # Set to false to hide DEV MODE completely for shipping builds.
@@ -28,6 +29,7 @@ const FX_SETTINGS_PATH := "user://fx_settings.cfg"
 var fx_shake := 1.0          ## scales every Game.shake() request
 var fx_hitstop := 1.0        ## scales hit-stop duration (0 disables freezes)
 var fx_flash := 1.0          ## scales full-screen flashes (World.flash_screen)
+var touch_controls_mode := 0 ## on-screen controls (Options, persisted): 0 = auto (touch devices), 1 = always on, 2 = off
 var _hs_end_ms := 0          ## real-time msec when the running hit-stop ends
 var _time_locked := false    ## death slow-mo owns Engine.time_scale; hit-stops are ignored
 
@@ -131,6 +133,7 @@ func load_fx_settings() -> void:
 	fx_shake = clampf(float(cf.get_value("fx", "shake", 1.0)), 0.0, 1.0)
 	fx_hitstop = clampf(float(cf.get_value("fx", "hitstop", 1.0)), 0.0, 1.0)
 	fx_flash = clampf(float(cf.get_value("fx", "flash", 1.0)), 0.0, 1.0)
+	touch_controls_mode = clampi(int(cf.get_value("fx", "touch_controls", 0)), 0, 2)
 
 
 func save_fx_settings() -> void:
@@ -138,4 +141,21 @@ func save_fx_settings() -> void:
 	cf.set_value("fx", "shake", fx_shake)
 	cf.set_value("fx", "hitstop", fx_hitstop)
 	cf.set_value("fx", "flash", fx_flash)
+	cf.set_value("fx", "touch_controls", touch_controls_mode)
 	cf.save(FX_SETTINGS_PATH)
+
+
+## Options setter: persists the touch-controls mode and notifies live consumers (TouchControls).
+func set_touch_mode(mode: int) -> void:
+	touch_controls_mode = clampi(mode, 0, 2)
+	save_fx_settings()
+	touch_mode_changed.emit()
+
+
+## True when on-screen touch controls should be active right now (mode 1 always, mode 0 auto-detect).
+func touch_enabled() -> bool:
+	if touch_controls_mode == 1:
+		return true
+	if touch_controls_mode == 2:
+		return false
+	return DisplayServer.is_touchscreen_available()

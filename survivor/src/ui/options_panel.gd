@@ -22,6 +22,31 @@ func _ready() -> void:
     _fs.toggled.connect(_on_fullscreen)
     add_child(_fs)
     call_deferred("_sync_fullscreen")
+    _touch_row()
+
+
+## On-screen joystick + pause button: Auto (touch devices), On (force, e.g. desktop testing), Off.
+func _touch_row() -> void:
+    var row := HBoxContainer.new()
+    row.add_theme_constant_override("separation", 12)
+    var l := UI.label("TOUCH", 20, UI.TEXT)
+    l.custom_minimum_size = Vector2(110, 0)
+    row.add_child(l)
+    var pick := OptionButton.new()
+    pick.add_item("Auto", 0)
+    pick.add_item("On", 1)
+    pick.add_item("Off", 2)
+    pick.select(clampi(Game.touch_controls_mode, 0, 2))
+    pick.add_theme_font_size_override("font_size", 18)
+    pick.custom_minimum_size = Vector2(240, 32)
+    pick.item_selected.connect(_on_touch_mode)
+    row.add_child(pick)
+    add_child(row)
+
+
+func _on_touch_mode(idx: int) -> void:
+    Game.set_touch_mode(idx)
+    Audio.sfx("button_click")
 
 
 func _sync_fullscreen() -> void:

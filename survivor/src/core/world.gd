@@ -37,6 +37,7 @@ var camera: Camera2D
 var actors: Node2D
 var ground: GroundLayer
 var hud: Hud
+var touch_controls: TouchControls
 var levelup: LevelUpScreen
 var pause_menu: PauseMenu
 var gameover: GameOverScreen
@@ -145,6 +146,9 @@ func start(char_id: String) -> void:
 	hud = Hud.new()
 	add_child(hud)
 	hud.setup(self)
+	touch_controls = TouchControls.new()
+	add_child(touch_controls)
+	touch_controls.setup(self)
 	act_ambient = ActAmbient.new()
 	add_child(act_ambient)
 	act_ambient.setup(self)
@@ -407,9 +411,16 @@ func _process(delta: float) -> void:
 
 
 func _unhandled_input(event: InputEvent) -> void:
-	if event.is_action_pressed("pause") and sim_running and not levelup.visible and not _over and not _clearing:
-		pause_menu.open()
+	if event.is_action_pressed("pause") and try_pause():
 		get_viewport().set_input_as_handled()
+
+
+## Shared pause entry (Esc/P key path and the on-screen touch button).
+func try_pause() -> bool:
+	if sim_running and not levelup.visible and not _over and not _clearing:
+		pause_menu.open()
+		return true
+	return false
 
 
 func _set_music(key: String, fade := 1.2) -> void:

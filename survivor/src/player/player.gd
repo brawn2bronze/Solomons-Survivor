@@ -208,6 +208,8 @@ func _process(delta: float) -> void:
 		_target_t = 0.08
 		_target = world.enemies.nearest(global_position, 520.0)
 	var input := Input.get_vector("move_left", "move_right", "move_up", "move_down")
+	if world.touch_controls != null:
+		input = (input + world.touch_controls.move_vector).limit_length(1.0)
 	if stunned > 0.0:
 		input = Vector2.ZERO
 	if dash_t > 0.0:
