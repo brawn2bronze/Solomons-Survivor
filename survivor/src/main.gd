@@ -50,6 +50,8 @@ func _clear() -> void:
 
 func _show_menu() -> void:
 	Game.clear_dev()
+	Game.run_from_descent = false
+	Game.pending_descent = {}
 	Audio.music("menu_music", 1.0)
 	var m := MainMenu.new()
 	add_child(m)
@@ -91,15 +93,20 @@ func _show_dev() -> void:
 
 func _show_select() -> void:
 	Game.clear_dev()
+	Game.run_from_descent = false
+	Game.pending_descent = {}
 	Audio.music("menu_music", 1.0)
 	var s := CharacterSelect.new()
 	add_child(s)
 	s.confirmed.connect(func(id: String) -> void: _go(_start_run.bind(id)))
+	s.continued.connect(func(id: String) -> void: _go(_start_run.bind(id, true)))
 	s.back.connect(func() -> void: _go(_show_menu))
 	_screen = s
 
 
-func _start_run(id: String) -> void:
+func _start_run(id: String, use_descent := false) -> void:
+	Game.pending_descent = Meta.get_descent(id).duplicate(true) if use_descent else {}
+	Game.run_from_descent = use_descent
 	var w := World.new()
 	add_child(w)
 	w.start(id)
@@ -110,7 +117,7 @@ func _start_run(id: String) -> void:
 func _on_exit(dest: String) -> void:
 	match dest:
 		"retry":
-			_go(_start_run.bind(Game.selected_character))
+			_go(_start_run.bind(Game.selected_character, Game.run_from_descent))
 		"select":
 			_go(_show_select)
 		_:

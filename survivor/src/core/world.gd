@@ -181,21 +181,33 @@ func start(char_id: String) -> void:
 	_skips = stock
 	_banishes = stock
 	_banished.clear()
+	# Descent checkpoint (Phase 3): consume Game.pending_descent once. A continued
+	# run restores the saved build instead of the meta loadout; dev runs ignore it.
+	var snap: Dictionary = Game.pending_descent
+	Game.pending_descent = {}
+	var continuing: bool = not Game.dev_active and not snap.is_empty() and Descent.restore(self, snap)
 	_set_music("ambient_loop")
-	var intro: String = "DEV SANDBOX" if Game.dev_active else "SURVIVE"
-	var rental_msg: String = _apply_meta_loadout()
-	if rental_msg != "":
-		intro += "  -  " + rental_msg
-	if stock > 0:
-		intro += "  -  FATE: %d REROLL / %d SKIP / %d BANISH" % [stock, stock, stock]
+	var intro: String
+	if continuing:
+		intro = "CONTINUE - %s" % String(acts.act_at(int(snap.get("next_act", 0))).display_name)
+	else:
+		intro = "DEV SANDBOX" if Game.dev_active else "SURVIVE"
+		var rental_msg: String = _apply_meta_loadout()
+		if rental_msg != "":
+			intro += "  -  " + rental_msg
+		if stock > 0:
+			intro += "  -  FATE: %d REROLL / %d SKIP / %d BANISH" % [stock, stock, stock]
 	announce(intro, Game.dev_active)
 	# Act director: normal runs start at act 1 with the clock reset; dev jump-ins
-	# derive the act from the seeded clock and keep it. First activation is instant.
+	# derive the act from the seeded clock and keep it; a Continue starts at the
+	# saved next act. First activation is instant.
 	var start_idx := 0
 	var set_clock := true
 	if Game.dev_active:
 		start_idx = acts.act_for_time(run_time)
 		set_clock = false
+	elif continuing:
+		start_idx = int(snap.get("next_act", 0))
 	acts.begin_act(start_idx, set_clock, true)
 
 
@@ -1104,6 +1116,13 @@ func withdraw() -> void:
 		return
 	_over = true
 	_clearing = false
+	if not Game.dev_active:
+		# Phase 3 checkpoint: one per hero, written on Withdraw only. A later,
+		# shallower save never overwrites a deeper one (kept until a deeper clear).
+		var snap: Dictionary = Descent.capture(self)
+		var prev: Dictionary = Meta.get_descent(String(player.def.id))
+		if prev.is_empty() or int(snap.get("next_act", 0)) > int(prev.get("next_act", 0)):
+			Meta.set_descent(String(player.def.id), snap)
 	bank_run()
 	rentals_stripped = true
 	sim_running = false

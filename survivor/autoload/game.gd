@@ -13,6 +13,8 @@ const VIEW := Vector2(640.0, 360.0)
 
 var selected_character := "cowboy"
 var last_result: Dictionary = {}
+var pending_descent: Dictionary = {}   # Phase 3: snapshot consumed by the next World.start (cleared once read)
+var run_from_descent := false          # Phase 3: true when the current run started from a checkpoint (Retry reuses it)
 var _hit_stop_token := 0
 
 # --- Developer / sandbox state (only used when DEV_MODE_ENABLED) ------------

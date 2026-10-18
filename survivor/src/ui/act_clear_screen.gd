@@ -10,7 +10,8 @@ extends CanvasLayer
 signal descend
 signal withdraw
 
-const WITHDRAW_SUB := "Your loadout is saved so you can continue from the next act. Unsealed weapons do not follow you out."
+const WITHDRAW_SUB := "Your loadout is saved - Continue this hero from Character Select at the next act. Unsealed (rented) weapons do not follow you out."
+const WITHDRAW_SUB_SEALED := "Your loadout is saved, but the gate ahead is sealed - there is no act to continue into. Unsealed (rented) weapons do not follow you out."
 const SEALED_TITLE := "THE FOURTH GATE HOLDS."
 const SEALED_SUB := "The Morning Star has not yet found you worthy."
 
@@ -98,7 +99,7 @@ func show_clear(cleared, next, at_risk: int, forced: bool, boss_name: String) ->
     wsub.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
     wsub.size_flags_horizontal = Control.SIZE_SHRINK_CENTER
     wcol.add_child(wsub)
-    var whint := UI.wrap_label(WITHDRAW_SUB, 17, UI.DIM, 380)
+    var whint := UI.wrap_label(WITHDRAW_SUB_SEALED if forced else WITHDRAW_SUB, 17, UI.DIM, 380)
     whint.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
     whint.size_flags_horizontal = Control.SIZE_SHRINK_CENTER
     wcol.add_child(whint)

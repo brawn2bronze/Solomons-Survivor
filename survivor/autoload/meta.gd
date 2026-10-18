@@ -24,6 +24,7 @@ const SEC_RENTALS := "rentals"
 const SEC_BESTIARY := "bestiary"
 const SEC_SEAL := "seal"
 const SEC_HERO_SEALS := "hero_seals"
+const SEC_DESCENT := "descent"
 
 var coins := 0
 var market_unlocked := false
@@ -33,6 +34,7 @@ var owned_mods: Array[String] = []      ## MarketItemDef ids (unknown ids are ke
 var _bestiary: Dictionary = {}          ## enemy id -> lifetime kills (int)
 var _seal_upgrades: Dictionary = {}     ## seal node id -> level (int)
 var _hero_seals: Dictionary = {}        ## hero id -> { seal node id -> level (int) }
+var _descent: Dictionary = {}           ## hero id -> Descent snapshot dict (one loadout checkpoint per hero)
 var _loaded_version := SAVE_VERSION
 var _dirty := false
 var _dirty_t := 0.0
@@ -113,6 +115,12 @@ func load_save() -> void:
                     clean[String(node_id)] = hlvl
             if not clean.is_empty():
                 _hero_seals[String(hero_id)] = clean
+    var raw_descent: Variant = cfg.get_value(SEC_DESCENT, "data", {})
+    if raw_descent is Dictionary:
+        for hero_id in (raw_descent as Dictionary).keys():
+            var snap: Variant = (raw_descent as Dictionary)[hero_id]
+            if snap is Dictionary and int((snap as Dictionary).get("v", 0)) > 0:
+                _descent[String(hero_id)] = (snap as Dictionary).duplicate(true)
 
 
 func save() -> bool:
@@ -134,6 +142,7 @@ func save() -> bool:
     cfg.set_value(SEC_BESTIARY, "kills", _bestiary)
     cfg.set_value(SEC_SEAL, "levels", _seal_upgrades)
     cfg.set_value(SEC_HERO_SEALS, "data", _hero_seals)
+    cfg.set_value(SEC_DESCENT, "data", _descent)
     # Write to a temp file first so a crash mid-write can never leave a half-written save.
     var tmp: String = SAVE_PATH + ".tmp"
     var err: int = cfg.save(tmp)
@@ -169,6 +178,7 @@ func _reset_state() -> void:
     _bestiary.clear()
     _seal_upgrades.clear()
     _hero_seals.clear()
+    _descent.clear()
     _loaded_version = SAVE_VERSION
     _dirty = false
 
@@ -479,6 +489,27 @@ func purchase_hero_seal(hero_id: String, node_id: String) -> bool:
     coins_changed.emit(coins)
     hero_seal_changed.emit(hero_id)
     return true
+
+
+# ------------------------------------------------------------------ descent checkpoint (Phase 3)
+## One loadout checkpoint per hero, written on Withdraw only. Read-only view for
+## the UI; set_descent saves immediately (the write happens before the escrow
+## bank so a crash mid-Withdraw cannot lose the checkpoint).
+func get_descent(hero_id: String) -> Dictionary:
+    if not _descent.has(hero_id):
+        return {}
+    return _descent[hero_id]
+
+
+func has_descent(hero_id: String) -> bool:
+    return _descent.has(hero_id)
+
+
+func set_descent(hero_id: String, snap: Dictionary) -> void:
+    if hero_id == "" or snap.is_empty():
+        return
+    _descent[hero_id] = snap.duplicate(true)
+    save()
 
 
 # ------------------------------------------------------------------ dev sandbox (DevOverlay)

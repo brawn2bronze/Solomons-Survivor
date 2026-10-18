@@ -63,6 +63,12 @@ func _show(world, victory: bool, forced: bool, banked: int) -> void:
     for row in rows:
         grid.add_child(UI.label(row[0], 22, UI.DIM))
         grid.add_child(UI.label(row[1], 22, row[2]))
+    if victory:
+        var saved_text: String = "Loadout saved - the next gate is not yet open." if forced else "Loadout saved - continue from Character Select."
+        var saved := UI.wrap_label(saved_text, 18, UI.GOLD, 560)
+        saved.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+        saved.size_flags_horizontal = Control.SIZE_SHRINK_CENTER
+        v.add_child(saved)
     if not victory and world.run_lost > 0:
         var hint := UI.wrap_label("Fall with Fragments in escrow and they are lost - bank them at the next Act Cleared screen.", 18, UI.CRIMSON, 560)
         hint.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER

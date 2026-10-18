@@ -250,6 +250,39 @@ for f in gd_files:
                 review.append(f"{os.path.relpath(f, ROOT)}:{j+1}: loop var '{v}' over `{it[:40]}` -> {mm.group(1)[:60]}")
 for r in review: print("review:", r)
 
+# ---- 4c. Descent checkpoint (Phase 3) shape ------------------------------------------------------
+gd_by_rel = {os.path.relpath(f, ROOT).replace("\\", "/"): all_text[f] for f in gd_files}
+def gd(rel):
+    return gd_by_rel.get(rel, "")
+dsc = gd("src/core/descent.gd")
+if dsc == "":
+    err("Phase 3: src/core/descent.gd missing")
+else:
+    if "class_name Descent" not in dsc: err("Phase 3: descent.gd missing class_name Descent")
+    if "extends RefCounted" not in dsc: err("Phase 3: descent.gd must extend RefCounted")
+    if "SNAP_VERSION" not in dsc: err("Phase 3: descent.gd missing SNAP_VERSION")
+    mk = re.search(r'const KEYS\s*:=\s*\[(.*?)\]', dsc, re.S)
+    if not mk:
+        err("Phase 3: descent.gd missing KEYS const")
+    else:
+        for k in re.findall(r'"(\w+)"', mk.group(1)):
+            if ('"%s":' % k) not in dsc: err(f"Phase 3: descent.gd capture omits snapshot key '{k}'")
+    if "static func capture(" not in dsc: err("Phase 3: descent.gd missing capture()")
+    if "static func restore(" not in dsc: err("Phase 3: descent.gd missing restore()")
+ab = gd("src/abilities/ability.gd")
+if "const STATE_KEYS" not in ab: err("Phase 3: ability.gd missing STATE_KEYS")
+for fn in ("to_dict", "from_dict"):
+    m = re.search(r'^func %s\(.*?(?=^func |^static func |\Z)' % fn, ab, re.S | re.M)
+    if not m: err("Phase 3: ability.gd missing %s()" % fn)
+    elif "STATE_KEYS" not in m.group(0): err("Phase 3: ability.gd %s() must iterate STATE_KEYS" % fn)
+for rel, token in [("autoload/meta.gd", "SEC_DESCENT"), ("autoload/meta.gd", "func get_descent"),
+        ("autoload/meta.gd", "func set_descent"), ("autoload/meta.gd", "func has_descent"),
+        ("autoload/game.gd", "pending_descent"), ("autoload/game.gd", "run_from_descent"),
+        ("src/core/world.gd", "Descent.capture("), ("src/core/world.gd", "Descent.restore("),
+        ("src/ui/character_select.gd", "signal continued"), ("src/ui/character_select.gd", "continued.emit("),
+        ("src/main.gd", "Meta.get_descent("), ("src/main.gd", "use_descent")]:
+    if token not in gd(rel): err("Phase 3: %s missing %s" % (rel, token))
+
 # ---- 5. signal connections: every `.connect(_name)` must resolve to a func in the same file ----
 for f in gd_files:
     t = all_text[f]

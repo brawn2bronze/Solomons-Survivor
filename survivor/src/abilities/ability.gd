@@ -8,6 +8,9 @@ const EVO1_LEVEL := 8           # first evolution (branch-specific) owed at 8
 const EVO2_LEVEL := 16          # final evolution (same line) owed at 16
 const POST_MAX := 16            # kit ceiling; leveling never gates on picks
 const MILESTONE_LEVELS := [10, 13]  # small pacing bumps between the evolutions
+## Snapshot state (Descent checkpoint, Phase 3). Single source for to_dict/from_dict
+## so the two never drift (check_project verifies the round-trip statically).
+const STATE_KEYS := ["level", "branch", "branch_level", "evo1", "evo2"]
 
 var def
 var player: Player
@@ -165,6 +168,27 @@ func set_mods(items: Array) -> void:
         mod_flags.merge((it.flags as Dictionary), true)
     recompute()
     on_changed()
+
+
+## Snapshot this ability's persistent state (Descent checkpoint). Mods are not
+## stored: they are re-derived live from Meta on restore.
+func to_dict() -> Dictionary:
+    var d: Dictionary = {"id": String(def.id)}
+    for k in STATE_KEYS:
+        d[k] = get(k)
+    return d
+
+
+## Restore persistent state from a snapshot in place, then recompute. Returns
+## false for an empty dict so callers can treat it as absent.
+func from_dict(d: Dictionary) -> bool:
+    if d.is_empty():
+        return false
+    for k in STATE_KEYS:
+        set(k, int(d.get(k, get(k))))
+    recompute()
+    on_changed()
+    return true
 
 
 ## Branch pick: locks the path but costs no level — the ability keeps whatever

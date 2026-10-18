@@ -6,6 +6,7 @@ extends CanvasLayer
 ## and cannot be confirmed. Arrows/mouse to browse, Enter/click to pick.
 
 signal confirmed(id: String)
+signal continued(id: String)
 signal back
 
 const COLS := 5
@@ -34,6 +35,9 @@ var _maxes := {}
 var _showcase: Array = []
 var _showcase_i := 0
 var _showcase_t := 0.0
+var _continue_box: VBoxContainer
+var _continue_btn: Button
+var _continue_sub: Label
 
 
 func _ready() -> void:
@@ -228,6 +232,17 @@ func _build_details(parent: Control) -> void:
     showcase_label = UI.wrap_label("", 14, UI.DIM, 400)
     showcase_label.size_flags_horizontal = Control.SIZE_EXPAND_FILL
     srow.add_child(showcase_label)
+    # Continue entry (Phase 3): shown above PLAYSTYLES for a playable hero that has a
+    # saved loadout checkpoint. Hidden otherwise; the sealed next act disables it.
+    _continue_box = VBoxContainer.new()
+    _continue_box.add_theme_constant_override("separation", 4)
+    v.add_child(_continue_box)
+    _continue_btn = UI.button("CONTINUE", 22, Vector2(0, 50))
+    _continue_btn.pressed.connect(_press_continue)
+    _continue_box.add_child(_continue_btn)
+    _continue_sub = UI.wrap_label("", 14, UI.DIM, 510)
+    _continue_box.add_child(_continue_sub)
+    _continue_box.visible = false
     v.add_child(_hdr("PLAYSTYLES"))
     styles_l = UI.wrap_label("", 14, UI.TEXT, 500)
     v.add_child(styles_l)
@@ -276,6 +291,7 @@ func _select(i: int, sound: bool) -> void:
         showcase_label.text = "Locked"
         showcase_tex.modulate = Color(0, 0, 0, 1)
         styles_l.text = blurb_l.text
+        _continue_box.visible = false
         for j in tiles.size():
             var lb: Button = tiles[j]
             var lcol: Color = lb.get_meta("color")
@@ -308,6 +324,7 @@ func _select(i: int, sound: bool) -> void:
     if c.flags.has("low_hp_scaling"):
         st += "* Gets stronger the lower your health"
     styles_l.text = st.strip_edges()
+    _refresh_continue(c)
     for j in tiles.size():
         var b: Button = tiles[j]
         var col: Color = b.get_meta("color")
@@ -380,6 +397,60 @@ func _ability_text(a: AbilityDef) -> String:
     return s
 
 
+## Continue entry (Phase 3): refresh the checkpoint button for the highlighted
+## playable hero. Hidden if there is no checkpoint; disabled when the next act is
+## sealed (the demo's Act III clear), where it reads "ACT IV - THE FOURTH GATE HOLDS".
+func _refresh_continue(c: CharacterDef) -> void:
+    var snap: Dictionary = Meta.get_descent(String(c.id))
+    if snap.is_empty():
+        _continue_box.visible = false
+        return
+    var nidx: int = int(snap.get("next_act", 0))
+    if nidx < 0 or nidx >= DB.acts.size():
+        _continue_box.visible = false
+        return
+    var act = DB.acts[nidx]
+    var sealed: bool = bool(act.sealed)
+    _continue_box.visible = true
+    _continue_btn.disabled = sealed
+    _continue_btn.text = "%s - THE FOURTH GATE HOLDS" % String(act.display_name) if sealed else "CONTINUE - %s" % String(act.display_name)
+    _continue_sub.text = "Lv %d  -  %s" % [int(snap.get("level", 1)), _saved_kit_line(snap)]
+
+
+func _saved_kit_line(snap: Dictionary) -> String:
+    return "%s  /  %s" % [_saved_ability_line(snap.get("weapon", {})), _saved_ability_line(snap.get("passive", {}))]
+
+
+func _saved_ability_line(d: Dictionary) -> String:
+    var def = DB.weapons.get(String(d.get("id", "")))
+    if def == null:
+        def = DB.passives.get(String(d.get("id", "")))
+    if def == null:
+        return "?"
+    var idx: int = int(d.get("branch", -1))
+    var br: String = ""
+    if idx >= 0 and idx < def.branches.size():
+        br = "  (%s)" % String(def.branches[idx]["name"])
+    return "%s Lv %d%s" % [String(def.display_name), int(d.get("level", 1)), br]
+
+
+func _press_continue() -> void:
+    if not _continue_box.visible:
+        return
+    var c: CharacterDef = roster[sel]
+    if int(c.get("roster_status")) != CharacterDef.RosterStatus.PLAYABLE:
+        return
+    var snap: Dictionary = Meta.get_descent(String(c.id))
+    if snap.is_empty():
+        return
+    var nidx: int = int(snap.get("next_act", 0))
+    if nidx < 0 or nidx >= DB.acts.size() or bool(DB.acts[nidx].sealed):
+        Audio.sfx("menu_close", -10.0, 1.0)
+        return
+    Audio.sfx("button_click", -10.0, 1.3)
+    continued.emit(String(c.id))
+
+
 func _confirm(i: int) -> void:
     var c: CharacterDef = roster[i]
     if int(c.get("roster_status")) != CharacterDef.RosterStatus.PLAYABLE:
@@ -440,6 +511,9 @@ func _unhandled_input(event: InputEvent) -> void:
         moved = (sel - COLS + n) % n
     if moved >= 0:
         _select(moved, true)
+        get_viewport().set_input_as_handled()
+    elif event is InputEventKey and event.pressed and not event.echo and (event as InputEventKey).physical_keycode == KEY_C:
+        _press_continue()
         get_viewport().set_input_as_handled()
     elif event.is_action_pressed("ui_confirm") or event.is_action_pressed("ui_accept"):
         _confirm(sel)

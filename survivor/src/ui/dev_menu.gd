@@ -85,13 +85,16 @@ func _ready() -> void:
 	_time_spin.value = float(_cfg.get("start_time", 0.0))
 	_time_spin.custom_minimum_size = Vector2(140, 32)
 	time_row.add_child(_time_spin)
-	var t0_b := UI.button("0", 14, Vector2(60, 32))
-	t0_b.pressed.connect(func() -> void: _time_spin.value = 0.0)
-	time_row.add_child(t0_b)
-	var t24_b := UI.button("24:50-10", 14, Vector2(110, 32))
-	t24_b.pressed.connect(func() -> void: _time_spin.value = 1490.0)
-	time_row.add_child(t24_b)
-	var boss_b := UI.button("Boss-10", 14, Vector2(110, 32))
+	var a1 := UI.button("Act I", 14, Vector2(80, 32))
+	a1.pressed.connect(_set_time_preset.bind(0))
+	time_row.add_child(a1)
+	var a2 := UI.button("Act II", 14, Vector2(80, 32))
+	a2.pressed.connect(_set_time_preset.bind(1))
+	time_row.add_child(a2)
+	var a3 := UI.button("Act III", 14, Vector2(80, 32))
+	a3.pressed.connect(_set_time_preset.bind(2))
+	time_row.add_child(a3)
+	var boss_b := UI.button("Boss - 10s", 14, Vector2(120, 32))
 	boss_b.pressed.connect(_on_preset_boss_time)
 	time_row.add_child(boss_b)
 	_rate_label = UI.label("Time rate x%.2f (slow-mo FX inspection)" % float(_cfg.get("time_rate", 1.0)), 14, UI.DIM)
@@ -259,6 +262,12 @@ func _on_preset_boss_time() -> void:
 	var boss = DB.enemies.get("bone_broker")
 	if boss != null:
 		_time_spin.value = maxf(0.0, float(boss.boss_time) - 10.0)
+
+
+## Jump the sandbox clock to the start of act `idx` (0 = Act I, 1 = Act II, ...).
+func _set_time_preset(idx: int) -> void:
+	if idx >= 0 and idx < DB.acts.size():
+		_time_spin.value = float(DB.acts[idx].clock_start)
 
 
 func _unhandled_input(event: InputEvent) -> void:
