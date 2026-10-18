@@ -17,6 +17,7 @@ enemies/goblin_hit.wav enemies/skeleton_hit.wav enemies/dragon_hit.wav enemies/d
 player/player_hit.wav player/player_death.wav player/xp_pickup.wav player/level_up.wav player/character_select.wav player/frog-fart.wav
 music/ambient_loop.ogg music/boss_music.ogg music/menu_music.ogg
 music/act1_orchestral.ogg music/act2_glitch.ogg music/act3_choir.ogg music/act4_lucifer.ogg
+music/boss_asmodeus.ogg music/boss_malphas.ogg music/boss_belial.ogg
 ui/button_click.wav ui/menu_open.wav ui/menu_close.wav ui/upgrade_selected.wav ui/market_unlock.wav ui/market_purchase.wav""".split()
 MUSIC_ALLOW_MISSING = {"music/act4_lucifer.ogg"}   # Act IV track not authored yet; missing-file warning path only
 
@@ -156,6 +157,8 @@ for aid in sorted(acts, key=lambda k: numf(acts[k], "index")):
     if bid and bid not in enemies and not sealed: err(f"{aid}: boss_id '{bid}' has no EnemyDef (sealed acts may omit)")
     mk = a.get("music_key", "").strip('"')
     if mk and mk not in music: err(f"{aid}: music_key '{mk}' not in AudioManager.MUSIC")
+    bmk = a.get("boss_music_key", "").strip('"')
+    if bmk and bmk not in music: err(f"{aid}: boss_music_key '{bmk}' not in AudioManager.MUSIC")
 for eid, e in enemies.items():
     if e.get("behavior", "").strip('"') == "boss_broker":
         if "fan" not in e.get("deck", ""): err(f"{eid}: boss_broker needs a non-empty deck")

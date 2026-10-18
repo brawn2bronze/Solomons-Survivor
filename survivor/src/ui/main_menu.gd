@@ -103,6 +103,7 @@ var _menu_box: VBoxContainer
 var _menu_left := 80.0
 var _buttons: Array = []
 var _bm_hint: Label
+var _seal_hint: Label
 var _name_l: Label
 var _role_l: Label
 var _opts_overlay: Control
@@ -231,7 +232,13 @@ func _build_menu() -> void:
     _bm_hint.visible = false
     _menu_box.add_child(_bm_hint)
     var sb := _add_btn("Solomon's Seal", 24, Vector2(300, 46))
-    sb.pressed.connect(_go.bind(seal))
+    sb.pressed.connect(_on_seal_pressed)
+    if not Meta.market_unlocked:
+        sb.text = "Solomon's Seal  [SEALED]"
+        sb.modulate = Color(0.62, 0.62, 0.7)
+    _seal_hint = UI.label("", 15, UI.DIM, HORIZONTAL_ALIGNMENT_LEFT)
+    _seal_hint.visible = false
+    _menu_box.add_child(_seal_hint)
     if Game.DEV_MODE_ENABLED:
         var db := _add_btn("Dev Mode", 22, Vector2(300, 44))
         db.pressed.connect(func() -> void: dev.emit())
@@ -458,6 +465,18 @@ func _on_market_pressed() -> void:
     Audio.sfx("menu_close")
     _bm_hint.text = Meta.unlock_hint()
     _bm_hint.visible = true
+    _glitch = maxf(_glitch, 0.6 * _flash_scale())      # "denied" jolt
+    _corrupt_t = 0.12
+
+
+## Opens Solomon's Seal, or explains how to unseal it while it is still sealed.
+func _on_seal_pressed() -> void:
+    if Meta.market_unlocked:
+        _go(seal)
+        return
+    Audio.sfx("menu_close")
+    _seal_hint.text = Meta.unlock_hint()
+    _seal_hint.visible = true
     _glitch = maxf(_glitch, 0.6 * _flash_scale())      # "denied" jolt
     _corrupt_t = 0.12
 

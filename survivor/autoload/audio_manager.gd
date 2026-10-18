@@ -46,6 +46,9 @@ const MUSIC := {
     "act2_glitch": "res://audio/music/act2_glitch.ogg",
     "act3_choir": "res://audio/music/act3_choir.ogg",
     "act4_lucifer": "res://audio/music/act4_lucifer.ogg",
+    "boss_asmodeus": "res://audio/music/boss_asmodeus.ogg",
+    "boss_malphas": "res://audio/music/boss_malphas.ogg",
+    "boss_belial": "res://audio/music/boss_belial.ogg",
 }
 ## Minimum seconds between two plays of the same event (stops 200 enemy hits per second turning into noise).
 const MIN_GAP := {
