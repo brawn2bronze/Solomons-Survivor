@@ -1,0 +1,65 @@
+#!/bin/sh
+# pre-commit gate for Solomon's Survivor.
+#
+# Runs tools/check_all.ps1, which runs every check tier: the whitespace guard, the
+# static project checks, the GDScript lint, and the real Godot parse check.
+#
+# MODE: warn. This hook NEVER blocks a commit - it prints the report and lets the commit
+# through. That is deliberate: the project has pre-existing failures in the data checks,
+# and a gate that blocks on them would just get bypassed with --no-verify.
+#
+# To make it block: set CHECK_ALL_STRICT=1 in the environment (or add -Strict to the
+# check_all.ps1 call below), which promotes warnings to failures and makes a failing tier
+# abort the commit.
+#
+# Enable it for this clone with:  git config core.hooksPath .githooks
+set -u
+
+REPO_ROOT=$(git rev-parse --show-toplevel)
+SURVIVOR="$REPO_ROOT/survivor"
+CHECK="$SURVIVOR/tools/check_all.ps1"
+
+if [ ! -f "$CHECK" ]; then
+  echo "pre-commit: $CHECK not found - skipping"
+  exit 0
+fi
+
+PS=""
+for candidate in pwsh powershell; do
+  if command -v "$candidate" >/dev/null 2>&1; then
+    PS="$candidate"
+    break
+  fi
+done
+
+if [ -z "$PS" ]; then
+  echo "pre-commit: no PowerShell found - skipping the checks"
+  exit 0
+fi
+
+if [ "${CHECK_ALL_SKIP:-0}" = "1" ]; then
+  echo "pre-commit: CHECK_ALL_SKIP=1 - skipping the checks"
+  exit 0
+fi
+
+STRICT_FLAG=""
+if [ "${CHECK_ALL_STRICT:-0}" = "1" ]; then
+  STRICT_FLAG="-Strict"
+fi
+
+echo "pre-commit: running the check tiers (warn mode - the commit is NOT blocked)"
+echo "pre-commit: set CHECK_ALL_STRICT=1 to make a failing tier block the commit"
+"$PS" -NoProfile -ExecutionPolicy Bypass -File "$CHECK" $STRICT_FLAG
+CODE=$?
+
+if [ "$CODE" -ne 0 ]; then
+  echo ""
+  echo "pre-commit: the checks reported problems (exit $CODE)."
+  if [ "${CHECK_ALL_STRICT:-0}" = "1" ]; then
+    echo "pre-commit: STRICT mode - the commit is blocked."
+    exit 1
+  fi
+  echo "pre-commit: warn mode - the commit continues. Fix what is listed above."
+fi
+
+exit 0

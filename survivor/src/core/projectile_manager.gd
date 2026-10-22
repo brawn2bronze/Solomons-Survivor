@@ -34,7 +34,23 @@ class Pr:
     var splash_dmg := 0.0
     var splash_falloff := false
     var zone_target := 0.0        # ZONE: disc radius it grows to before popping
+    var dist := 0.0               # distance travelled so far (long_barrel ramp)
+    var dist_gain := 0.0          # damage multiplier gained per pixel travelled
+    var dist_cap := 0.6           # cap on the distance damage ramp
+    var ricochet := false         # bounce to a nearby enemy on final pierce
+    var ricochet_range := 150.0   # ricochet: enemy search radius
+    var ricochet_mult := 0.6      # ricochet: bounced round damage multiplier
+    var ricochet_left := 0        # ricochet: bounces still allowed after this one
+    var burst_r := 0.0            # friendly AoE burst radius on hit (0 = off)
+    var burst_dmg := 0.0
     var skin := {}                # weapon FX skin (AbilityArt.weapon_proj_skin); {} / fallback = procedural head
+    var hit_cb := Callable()      # called with the enemy when this projectile lands a hit
+    var rebound := false          # turns around at rebound_range and comes back
+    var rebound_done := false
+    var rebound_range := 0.0
+    var catch_radius := 0.0       # the player can catch it within this radius
+    var catch_cb := Callable()
+    var caught := false
 
 var world
 var live: Array[Pr] = []
@@ -75,6 +91,22 @@ func _take():
     p.splash_dmg = 0.0
     p.splash_falloff = false
     p.zone_target = 0.0
+    p.dist = 0.0
+    p.dist_gain = 0.0
+    p.dist_cap = 0.6
+    p.ricochet = false
+    p.ricochet_range = 150.0
+    p.ricochet_mult = 0.6
+    p.ricochet_left = 0
+    p.burst_r = 0.0
+    p.burst_dmg = 0.0
+    p.hit_cb = Callable()
+    p.rebound = false
+    p.rebound_done = false
+    p.rebound_range = 0.0
+    p.catch_radius = 0.0
+    p.catch_cb = Callable()
+    p.caught = false
     p.skin = {}
     p.w = 0.0
     p.spin = randf() * TAU
@@ -102,6 +134,27 @@ func fire(kind: int, pos: Vector2, dir: Vector2, speed: float, dmg: float, radiu
     p.w = float(opts.get("w", 0.0))
     p.burn_dps = float(opts.get("burn_dps", 0.0))
     p.burn_t = float(opts.get("burn_time", 0.0))
+    p.dist_gain = float(opts.get("dist_gain", 0.0))
+    p.dist_cap = float(opts.get("dist_cap", 0.6))
+    p.ricochet = bool(opts.get("ricochet", false))
+    p.ricochet_range = float(opts.get("ricochet_range", 150.0))
+    p.ricochet_mult = float(opts.get("ricochet_mult", 0.6))
+    p.ricochet_left = int(opts.get("ricochet_bounces", 1))
+    p.burst_r = float(opts.get("burst_r", 0.0))
+    p.burst_dmg = float(opts.get("burst_dmg", 0.0))
+    var cb_hit = opts.get("hit_cb", null)
+    if cb_hit is Callable:
+        p.hit_cb = cb_hit
+    p.rebound = bool(opts.get("rebound", false))
+    p.rebound_range = float(opts.get("rebound_range", 0.0))
+    p.catch_radius = float(opts.get("catch_radius", 0.0))
+    var cb_catch = opts.get("catch_cb", null)
+    if cb_catch is Callable:
+        p.catch_cb = cb_catch
+    if p.rebound and p.rebound_range > 0.0:
+        var spd := p.vel.length()
+        if spd > 0.0:
+            p.life = (p.rebound_range * 2.0) / spd
     var sk = opts.get("skin", {})
     p.skin = sk if sk is Dictionary else {}
     for i in p.trail.size():
@@ -112,6 +165,10 @@ func fire(kind: int, pos: Vector2, dir: Vector2, speed: float, dmg: float, radiu
 
 
 func spawn_hostile(pos: Vector2, vel: Vector2, dmg: float, air: bool, opts: Dictionary = {}) -> void:
+    # Vanish / ambush windows: an untargetable player is not fired at, so no
+    # hostile shot spawns at all (covers every enemy attack in one choke point).
+    if world != null and world.player != null and world.player.untargetable:
+        return
     var p: Pr = _take()
     if p == null:
         return
@@ -178,26 +235,44 @@ func spawn_trap_zone(pos: Vector2, radius: float, dmg: float, duration: float, o
     p.skin["trap"] = true
     p.skin["trap_src"] = String(opts.get("src", ""))
     p.skin["trap_radius"] = radius
+    p.skin["trap_slow"] = float(opts.get("slow_mult", 1.0))
+    p.skin["trap_slow_t"] = float(opts.get("slow_time", 0.0))
+    p.skin["trap_stun"] = float(opts.get("stun", 0.0))
+    p.skin["trap_contact"] = float(opts.get("contact_mult", 1.0))
+    p.skin["trap_contact_t"] = float(opts.get("contact_time", 0.0))
+    p.skin["trap_arm"] = float(opts.get("arm", 0.0))
     for i in p.trail.size():
         p.trail[i] = pos
 
 
 ## Evolution primitive 6: intercept hostile projectiles in a radius.
 ## mode: "destroy" removes them, "reflect" turns them friendly, "absorb" removes.
+## dir/arc_rad optionally restrict the intercept to a cone (TAU = full circle).
 ## Returns the number intercepted. cooldown handled by caller.
-func intercept(center: Vector2, radius: float, mode: String = "destroy") -> int:
+func intercept(center: Vector2, radius: float, mode: String = "destroy", dir: Vector2 = Vector2.ZERO, arc_rad: float = TAU) -> int:
     if world == null:
         return 0
     var n := 0
     var r2 := radius * radius
+    var cone := arc_rad < TAU - 0.001 and dir.length_squared() > 0.0
     var i := live.size() - 1
     while i >= 0:
         var p: Pr = live[i]
-        if p.kind == Kind.HOSTILE and p.pos.distance_squared_to(center) <= r2 + p.radius * p.radius:
+        var in_range := p.kind == Kind.HOSTILE and p.pos.distance_squared_to(center) <= r2 + p.radius * p.radius
+        if in_range and cone:
+            var to := p.pos - center
+            if to.length_squared() > 0.0001 and absf(dir.angle_to(to)) > arc_rad * 0.5:
+                in_range = false
+        if in_range:
             if mode == "reflect":
                 p.kind = Kind.BULLET
                 p.color = Color(1.0, 0.85, 0.4)
                 p.hit.clear()
+                var tgt = world.enemies.nearest(p.pos, 600.0, {})
+                if tgt != null:
+                    p.vel = (tgt.pos - p.pos).normalized() * maxf(p.vel.length(), 1.0)
+                else:
+                    p.vel = -p.vel
                 n += 1
                 i -= 1
             else:
@@ -221,33 +296,51 @@ func _process(delta: float) -> void:
         p.age += delta
         p.life -= delta
         p.pos += p.vel * delta
+        p.dist += p.vel.length() * delta
         if p.grow != 0.0:
             p.radius += p.grow * delta
         for k in range(p.trail.size() - 1):
             p.trail[k] = p.trail[k + 1]
         p.trail[p.trail.size() - 1] = p.pos
         var dead := p.life <= 0.0
+        var caught := false
+        if p.rebound and not p.rebound_done and p.rebound_range > 0.0 and p.dist >= p.rebound_range:
+            p.rebound_done = true
+            p.vel = -p.vel
+            p.hit.clear()
+            if world != null:
+                world.fx.ring(p.pos, 4.0, 18.0, 0.2, p.color, 2.0)
+        if p.catch_radius > 0.0 and world != null and world.player != null:
+            if p.pos.distance_to(world.player.global_position) <= p.catch_radius:
+                caught = true
+                if p.catch_cb.is_valid():
+                    p.catch_cb.call(p)
         if p.kind == Kind.ZONE:
-            # growing-disc telegraph; grows toward zone_target over its life
-            var total: float = p.life + p.age
-            if total > 0.0:
-                p.radius = p.zone_target * clampf(p.age / total, 0.0, 1.0)
-            if dead:
-                world.fx.ring(p.pos, p.radius * 0.6, p.radius, 0.22, p.color, 3.0)
-                world.fx.hit_sparks(p.pos, Vector2.UP, p.color, 8)
-                if p.pos.distance_to(world.player.global_position) <= p.radius:
-                    world.player.take_damage(p.dmg, p.air, "Hellfire")
-        elif not dead:
+            if bool(p.skin.get("trap", false)):
+                # persistent player trap: damages enemies on its tick, never the player
+                p.radius = p.zone_target
+                _zone_tick(p, now, delta)
+            else:
+                # growing-disc telegraph; grows toward zone_target over its life
+                var total: float = p.life + p.age
+                if total > 0.0:
+                    p.radius = p.zone_target * clampf(p.age / total, 0.0, 1.0)
+                if dead:
+                    world.fx.ring(p.pos, p.radius * 0.6, p.radius, 0.22, p.color, 3.0)
+                    world.fx.hit_sparks(p.pos, Vector2.UP, p.color, 8)
+                    if p.pos.distance_to(world.player.global_position) <= p.radius:
+                        world.player.take_damage(p.dmg, p.air, "Hellfire", p.pos)
+        elif not dead and not caught:
             if p.kind == Kind.HOSTILE:
                 if p.pos.distance_squared_to(world.player.global_position) < 14.0 * 14.0:
-                    world.player.take_damage(p.dmg, p.air, "Projectile")
+                    world.player.take_damage(p.dmg, p.air, "Projectile", p.pos)
                     world.fx.hit_sparks(p.pos, p.vel, p.color, 6)
                     dead = true
             else:
                 dead = _hit_enemies(p, now)
         elif p.kind == Kind.HOSTILE and p.splash_r > 0.0:
             _splash(p)
-        if dead:
+        if dead or caught:
             p.alive = false
             live.remove_at(i)
             _free.append(p)
@@ -264,9 +357,37 @@ func _splash(p: Pr) -> void:
     var dmg: float = p.splash_dmg
     if p.splash_falloff:
         dmg *= clampf(1.0 - d / p.splash_r, 0.25, 1.0)
-    world.player.take_damage(dmg, p.air, "Splash")
+    world.player.take_damage(dmg, p.air, "Splash", p.pos)
     world.fx.ring(p.pos, 4.0, p.splash_r, 0.25, p.color, 3.0)
     world.fx.hit_sparks(p.pos, p.vel, p.color, 10)
+
+
+func _zone_tick(p: Pr, now: float, delta: float) -> void:
+    var arm := float(p.skin.get("trap_arm", 0.0))
+    if arm > 0.0:
+        p.skin["trap_arm"] = arm - delta
+        return
+    var hits: Array[EnemyManager.E] = world.enemies.query_ground_circle(p.pos, p.radius)
+    var src := String(p.skin.get("trap_src", ""))
+    var slow_mult := float(p.skin.get("trap_slow", 1.0))
+    var slow_time := float(p.skin.get("trap_slow_t", 0.0))
+    var stun_t := float(p.skin.get("trap_stun", 0.0))
+    var cmult := float(p.skin.get("trap_contact", 1.0))
+    var ctime := float(p.skin.get("trap_contact_t", 0.0))
+    for e in hits:
+        if slow_time > 0.0:
+            world.enemies.slow(e, slow_mult, slow_time)
+        if stun_t > 0.0:
+            world.enemies.stun(e, stun_t)
+        if ctime > 0.0:
+            e.contact_mult = minf(e.contact_mult, cmult)
+            e.contact_mult_t = maxf(e.contact_mult_t, ctime)
+        if p.dmg <= 0.0:
+            continue
+        if float(p.hit.get(e.uid, -1.0)) > now:
+            continue
+        p.hit[e.uid] = now + p.rehit
+        world.enemies.damage(e, p.dmg, (e.pos - p.pos), 0.0, p.color, src)
 
 
 func _hit_enemies(p: Pr, now: float) -> bool:
@@ -276,7 +397,14 @@ func _hit_enemies(p: Pr, now: float) -> bool:
         if next_ok > now:
             continue
         p.hit[e.uid] = now + p.rehit
-        world.enemies.damage(e, p.dmg, p.vel, p.knock, p.color)
+        var dealt: float = p.dmg
+        if p.dist_gain > 0.0:
+            dealt *= 1.0 + minf(p.dist_cap, p.dist * p.dist_gain)
+        world.enemies.damage(e, dealt, p.vel, p.knock, p.color)
+        if p.hit_cb.is_valid():
+            p.hit_cb.call(e)
+        if p.burst_r > 0.0:
+            _burst(p, e.pos, e.uid)
         if p.burn_t > 0.0 and e.alive:
             world.enemies.burn(e, p.burn_dps, p.burn_t)
         if p.shrapnel > 0:
@@ -285,9 +413,39 @@ func _hit_enemies(p: Pr, now: float) -> bool:
             world.fx.ring(p.pos, 4.0, 26.0, 0.18, Color(1.0, 0.7, 0.3), 2.0)
             Game.shake(1.6)
         if p.pierce <= 0:
+            if p.ricochet:
+                _ricochet(p, e)
             return true
         p.pierce -= 1
     return false
+
+
+## Ricochet round: on its final pierce, bounce a weaker round at a nearby enemy.
+func _ricochet(p: Pr, from_e: EnemyManager.E) -> void:
+    var nxt: EnemyManager.E = world.enemies.nearest(from_e.pos, p.ricochet_range, {from_e.uid: true})
+    if nxt == null:
+        return
+    var dir: Vector2 = (nxt.pos - from_e.pos).normalized()
+    var b: Pr = fire(Kind.BULLET, from_e.pos, dir, p.vel.length(), p.dmg * p.ricochet_mult, p.radius, 0, 0.5, p.color)
+    if b != null:
+        b.hit[from_e.uid] = 1.0e9
+        b.ricochet_left = p.ricochet_left - 1
+        if b.ricochet_left > 0:
+            b.ricochet = true
+            b.ricochet_range = p.ricochet_range
+            b.ricochet_mult = p.ricochet_mult
+        world.fx.star(from_e.pos, 6.0, p.color)
+
+
+## Friendly burst on hit (dead_mans_hand Ace): small AoE that skips the direct target.
+func _burst(p: Pr, center: Vector2, skip_uid: int) -> void:
+    world.fx.ring(center, 6.0, p.burst_r, 0.22, p.color, 3.0)
+    world.fx.hit_sparks(center, Vector2.UP, p.color, 10)
+    Game.shake(1.2)
+    for e2 in world.enemies.query_circle(center, p.burst_r):
+        if e2.uid == skip_uid:
+            continue
+        world.enemies.damage(e2, p.burst_dmg, (e2.pos - center), 60.0, p.color)
 
 
 func _shrapnel(p: Pr, e: EnemyManager.E) -> void:

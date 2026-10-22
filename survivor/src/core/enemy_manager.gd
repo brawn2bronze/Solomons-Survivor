@@ -56,6 +56,8 @@ class E:
 	var hit_gate := {}
 	var atk_slow := 1.0
 	var slow_t := 0.0
+	var contact_mult := 1.0         # smoke veil: contact-damage multiplier while inside
+	var contact_mult_t := 0.0
 	var poison_dps := 0.0
 	var poison_t := 0.0
 	var burn_dps := 0.0
@@ -450,10 +452,11 @@ func _process(delta: float) -> void:
 	_rebuild_grid()
 	_tick_director(delta)
 	var pp: Vector2 = player.global_position
-	var n := active.size()
-	for i in n:
-		var e: E = active[i]
-		_update_enemy(e, delta, pp)
+	# Snapshot: contact damage can call player on-hurt procs that kill enemies
+	# mid-loop, and _kill() swap-pops `active`, which invalidates live indices.
+	for e in active.duplicate():
+		if e.alive:
+			_update_enemy(e, delta, pp)
 	for e in _dead:
 		if e.alive:
 			_kill(e)
@@ -489,11 +492,24 @@ func _update_enemy(e: E, delta: float, pp: Vector2) -> void:
 		e.hit_gate[k] = float(e.hit_gate[k]) - delta
 		if e.hit_gate[k] <= 0.0:
 			e.hit_gate.erase(k)
+	if not e.marks.is_empty():
+		for mk in e.marks.keys():
+			var mv = e.marks[mk]
+			if mv is Dictionary and float(mv.get("t", 0.0)) > 0.0:
+				var remain: float = float(mv["t"]) - delta
+				if remain <= 0.0:
+					e.marks.erase(mk)
+				else:
+					mv["t"] = remain
 	if e.slow_t > 0.0:
 		e.slow_t -= delta
 		if e.slow_t <= 0.0:
 			e.slow = 1.0
 			e.atk_slow = 1.0
+	if e.contact_mult_t > 0.0:
+		e.contact_mult_t -= delta
+		if e.contact_mult_t <= 0.0:
+			e.contact_mult = 1.0
 	if e.poison_t > 0.0:
 		e.poison_t -= delta
 		e.hp -= e.poison_dps * delta
@@ -557,7 +573,7 @@ func _update_enemy(e: E, delta: float, pp: Vector2) -> void:
 	# contact damage (blink vanish cannot touch while vanished; glitch fodder always touches)
 	if e.contact_cd <= 0.0 and e.stun <= 0.0 and e.fear <= 0.0 and dist < e.radius + PLAYER_RADIUS and not (String(d.behavior) == "blink" and e.state == 1) and not player.untargetable:
 		e.contact_cd = 0.75
-		player.take_damage(e.dmg, d.height == 1 or d.can_hit_flying, d.display_name)
+		player.take_damage(e.dmg * e.contact_mult, d.height == 1 or d.can_hit_flying, d.display_name, e.pos)
 	# visuals
 	var sp := e.sprite
 	sp.position = e.pos + Vector2(0, -9.0 if d.height == 1 else 0.0)
@@ -826,7 +842,7 @@ func _spiral_tick(e: E, d, delta: float) -> void:
 ## execute. Creditors (adds) inject between deck draws to keep the arena alive
 ## while the director is frozen. Enrage: extra fan burst, crossed ledger lines,
 ## a third gap ring, +2 creditors, faster recover.
-func _boss_broker(e: E, delta: float, dir: Vector2, dist: float) -> Vector2:
+func _boss_broker(e: E, delta: float, dir: Vector2, _dist: float) -> Vector2:
 	var d = e.def
 	var enraged: bool = e.hp < e.max_hp * float(d.enrage_hp_fraction)
 	if enraged and not e.enraged_seen:
@@ -1175,6 +1191,14 @@ func damage(e: E, amount: float, knock_dir: Vector2 = Vector2.ZERO, knock_force:
 	var crit: bool = randf() < 0.07 + float(player.stat("luck")) * 0.25 + float(player.stat("crit_chance"))
 	if crit:
 		amount *= 2.0
+	if not is_dummy and e.marks.has("wanted_poster"):
+		var wm: Dictionary = e.marks["wanted_poster"]
+		if player.global_position.distance_to(e.pos) <= float(wm.get("leash", 260.0)):
+			amount *= float(wm.get("taken", 1.25))
+	if not is_dummy and src == "" and e.marks.has("killing_light"):
+		amount *= float((e.marks["killing_light"] as Dictionary).get("mult", 2.0))
+		e.stun = 0.0
+		e.marks.erase("killing_light")
 	if not is_dummy:
 		e.hp -= amount
 		_maybe_execute(e)
@@ -1226,8 +1250,11 @@ func slow(e: E, mult: float, seconds: float) -> void:
 	e.slow_t = maxf(e.slow_t, seconds)
 
 
-func mark(e: E, key: String) -> void:
-	e.marks[key] = true
+func mark(e: E, key: String, seconds: float = 0.0, src: String = "", extra: Dictionary = {}) -> void:
+	var m := {"t": seconds, "src": src}
+	for k in extra:
+		m[k] = extra[k]
+	e.marks[key] = m
 
 
 func has_mark(e: E, key: String) -> bool:

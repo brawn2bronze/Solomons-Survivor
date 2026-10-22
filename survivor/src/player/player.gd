@@ -50,11 +50,13 @@ var passive: Ability
 var chest_weapons: Array[Ability] = []
 var rented_weapon_id := ""     # Black Market rental this run started with (HUD tags it)
 var vel := Vector2.ZERO
+var move_input := Vector2.ZERO  # player intent, excludes dash/knockback impulse
 var facing_x := 1.0
 var last_dir := Vector2.RIGHT
 var invuln := 0.0
 var stunned := 0.0
-var untargetable := false
+var untargetable := 0.0       # seconds; honored by contact, projectiles and enemy aim
+var untargetable_t := 0.0
 var dead := false
 var flying := false
 var can_fly := false
@@ -63,6 +65,7 @@ var armor := 0.0
 var crit_chance := 0.0
 var dmg_mitigation := 0.0
 var proj_mults: Dictionary = {}
+var reload_mult := 1.0            # reload-time divider: 2.0 = twice as fast (Jolly Roger banner)
 var sources: Dictionary = {}
 var aura_r := 0.0
 var aura_col := Color.WHITE
@@ -132,11 +135,11 @@ func stat(stat_name: String) -> float:
 		v *= 1.0 + Meta.get_total_seal_bonus("move_speed") + Meta.get_bestiary_bonus("move_speed") + bestiary_move * Meta.catalogued_count()
 	elif stat_name == "max_hp":
 		v *= 1.0 + Meta.get_total_seal_bonus("max_hp")
-    elif stat_name == "crit_chance":
-        return crit_chance
-    if stat_name == "cooldown":
-        v = maxf(0.60, v)
-    return v
+	elif stat_name == "crit_chance":
+		return crit_chance
+	if stat_name == "cooldown":
+		v = maxf(0.60, v)
+	return v
 
 
 func refresh() -> void:
@@ -160,10 +163,10 @@ func remove_buff(id: String) -> void:
 
 
 func projectile_multiplier() -> float:
-    var m := 1.0
-    for k in proj_mults.keys():
-        m *= float(proj_mults[k])
-    return minf(m, 3.0)
+	var m := 1.0
+	for k in proj_mults.keys():
+		m *= float(proj_mults[k])
+	return minf(m, 3.0)
 
 
 func scaled_count(n: int) -> int:
@@ -215,6 +218,7 @@ func _process(delta: float) -> void:
 		input = (input + world.touch_controls.move_vector).limit_length(1.0)
 	if stunned > 0.0:
 		input = Vector2.ZERO
+	move_input = input
 	if dash_t > 0.0:
 		_update_dash(delta)
 	else:
@@ -231,9 +235,12 @@ func _process(delta: float) -> void:
 		hp = minf(max_hp, hp + rg * delta)
 	if stunned <= 0.0:
 		weapon.update(delta)
+		weapon.update_evos(delta)
 		for cw in chest_weapons:
 			cw.update(delta)
+			cw.tick_afters(delta)
 	passive.update(delta)
+	passive.update_evos(delta)
 	history.push_back(global_position)
 	history.pop_front()
 	_animate(delta, input)
@@ -243,6 +250,7 @@ func _process(delta: float) -> void:
 func _tick_timers(delta: float) -> void:
 	invuln = maxf(0.0, invuln - delta)
 	stunned = maxf(0.0, stunned - delta)
+	untargetable = maxf(0.0, untargetable - delta)
 	_hurt_flash = maxf(0.0, _hurt_flash - delta)
 	flash_t = maxf(0.0, flash_t - delta)
 	for i in range(buffs.size() - 1, -1, -1):
@@ -258,6 +266,17 @@ func _tick_timers(delta: float) -> void:
 
 func is_moving() -> bool:
 	return vel.length() > 12.0 or dash_t > 0.0
+
+
+## Intent-based movement: true while the player is steering or dashing, even if
+## the body was just nudged by a swing impulse.
+func is_walking() -> bool:
+	return move_input.length() > 0.1 or dash_t > 0.0
+
+
+## Fraction of top speed currently travelled (0..~1.4), for speed-scaled evolutions.
+func speed_ratio() -> float:
+	return clampf(vel.length() / maxf(stat("move_speed"), 1.0), 0.0, 1.4)
 
 func _animate(delta: float, _input: Vector2) -> void:
 	var moving := is_moving()
@@ -306,6 +325,8 @@ func _draw() -> void:
 	if armor > 0.0:
 		draw_arc(Vector2(0, -14), 21.0, 0.0, TAU, 32, Color(1.0, 0.85, 0.4, 0.75), 2.0)
 		draw_arc(Vector2(0, -14), 24.0, _time * 3.0, _time * 3.0 + 2.0, 12, Color(1.0, 0.95, 0.7, 0.5), 1.5)
+	if passive != null:
+		passive.draw_overlay(self)
 	if weapon != null:
 		weapon.draw_overlay(self)
 	for cw in chest_weapons:
@@ -323,6 +344,27 @@ func start_dash(dir: Vector2, dist: float, speed: float, opts: Dictionary = {}) 
 		invuln = maxf(invuln, dash_t + 0.12)
 	if absf(dash_dir.x) > 0.1:
 		facing_x = signf(dash_dir.x)
+
+
+# ------------------------------------------------------------------ blink (primitive 8)
+## Teleport to `pos` (Vanish, Kawarimi, Blink Strike, Astral Swap). Optionally
+## set an invulnerability window. Leaves a ghost tell at both ends.
+func blink_to(pos: Vector2, invuln_time: float = 0.0) -> void:
+	if dead:
+		return
+	var from := global_position
+	global_position = pos
+	vel = Vector2.ZERO
+	if invuln_time > 0.0:
+		invuln = maxf(invuln, invuln_time)
+	var col: Color = def.color
+	world.fx.emit(from + Vector2(0, -12), Vector2.ZERO, 0.28, 9.0, Color(col.r, col.g, col.b, 0.5), 1, 0.0)
+	world.fx.emit(pos + Vector2(0, -12), Vector2.ZERO, 0.28, 9.0, Color(col.r, col.g, col.b, 0.6), 1, 0.0)
+
+
+## Vanish window: enemies stop firing at and cannot touch the player until `seconds` elapse.
+func go_untargetable(seconds: float) -> void:
+	untargetable = maxf(untargetable, seconds)
 
 
 func _update_dash(delta: float) -> void:
@@ -365,8 +407,8 @@ func aura_flash(radius: float, color: Color) -> void:
 
 
 # ------------------------------------------------------------------ damage / death
-func take_damage(amount: float, hits_air: bool = false, _source: String = "") -> void:
-	if dead or invuln > 0.0 or untargetable:
+func take_damage(amount: float, hits_air: bool = false, source: String = "", source_pos: Vector2 = Vector2.INF) -> void:
+	if dead or invuln > 0.0 or untargetable > 0.0:
 		return
 	if Game.godmode:
 		return
@@ -375,7 +417,14 @@ func take_damage(amount: float, hits_air: bool = false, _source: String = "") ->
 			return
 		_knock_from_flight()
 	amount = maxf(1.0, amount - stat("defense"))
-	amount = maxf(1.0, amount * (1.0 - dmg_mitigation))
+	var taken_mult := 1.0
+	if weapon != null:
+		taken_mult *= weapon.incoming_damage_mult(amount, source_pos, source)
+	if passive != null:
+		taken_mult *= passive.incoming_damage_mult(amount, source_pos, source)
+	for cw in chest_weapons:
+		taken_mult *= cw.incoming_damage_mult(amount, source_pos, source)
+	amount = maxf(1.0, amount * (1.0 - dmg_mitigation) * taken_mult)
 	if armor > 0.0:
 		armor -= amount
 		world.fx.hit_sparks(global_position + Vector2(0, -12), Vector2.ZERO, Color(1.0, 0.85, 0.4), 6)
@@ -384,13 +433,21 @@ func take_damage(amount: float, hits_air: bool = false, _source: String = "") ->
 		if armor <= 0.0:
 			armor = 0.0
 			passive.on_armor_break()
+		weapon.hook("on_hurt", {"amount": amount})
+		passive.hook("on_hurt", {"amount": amount})
 		return
-    hp -= amount
-    invuln = 0.55
-    _hurt_flash = 0.12
-    hurt.emit()
-    if world != null:
-        world.on_player_hurt(amount)
+	if passive != null and passive.absorb_hit(amount):
+		return
+	if weapon != null and weapon.absorb_hit(amount):
+		return
+	hp -= amount
+	invuln = 0.55
+	_hurt_flash = 0.12
+	hurt.emit()
+	if world != null:
+		world.on_player_hurt(amount)
+	weapon.hook("on_hurt", {"amount": amount})
+	passive.hook("on_hurt", {"amount": amount})
 	Audio.sfx("player_hit", -2.0)
 	Game.shake(4.5)
 	Game.hit_stop(0.05, 0.05)
@@ -453,12 +510,12 @@ func _late_scaled_value(up: UpgradeDef) -> float:
 	var t := 0.0
 	if world != null:
 		t = float(world.run_time)
-    var f := 1.0 + minf(t, 1800.0) / 1800.0 * 0.15
-    if up.op == "mul":
-        if v >= 1.0:
-            return 1.0 + (v - 1.0) * f
-        return 1.0 - (1.0 - v) * f
-    return v * f
+	var f := 1.0 + minf(t, 1800.0) / 1800.0 * 0.15
+	if up.op == "mul":
+		if v >= 1.0:
+			return 1.0 + (v - 1.0) * f
+		return 1.0 - (1.0 - v) * f
+	return v * f
 
 
 func apply_chest_weapon(id: String) -> String:
@@ -479,6 +536,13 @@ func apply_chest_weapon(id: String) -> String:
 	refresh()
 	return "Found %s!" % res.display_name
 
+
+## Cross-ability evo event: whenever a weapon or passive fires its main action,
+## call this to run hook("on_player_cast", ctx) on the other ability.
+func broadcast_cast(src: String, ctx: Dictionary) -> void:
+	var other: Ability = weapon if src == "passive" else passive
+	if other != null:
+		other.hook("on_player_cast", ctx)
 
 func apply_choice(ch: Dictionary) -> void:
 	match String(ch["type"]):

@@ -19,3 +19,4 @@ icon_frames = 2
 icon_fps = 8.0
 preview_kind = "static"
 anims = {}
+caps = {"count": [0, 4], "cooldown": [0.8, 99.0], "size": [0.0, 2.0]}

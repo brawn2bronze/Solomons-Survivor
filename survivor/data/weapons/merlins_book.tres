@@ -19,4 +19,4 @@ icon_frames = 1
 icon_fps = 8.0
 preview_kind = "static"
 anims = {}
-caps = {"cooldown": [0.60, 99.0], "damage": [0.1, 500.0], "chains": [0, 12], "chain_range": [30.0, 400.0]}
+caps = {"cooldown": [0.55, 99.0], "damage": [0.1, 500.0], "chains": [0, 6], "chain_range": [30.0, 400.0]}

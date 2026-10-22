@@ -28,12 +28,18 @@ $TAB = @(
   "src/player/player.gd", "src/core/status_icons.gd", "src/core/fx_manager.gd",
   "src/core/fx_layer.gd", "src/core/critter_manager.gd", "src/core/enemy_manager.gd",
   "src/ui/dev_menu.gd", "src/ui/dev_overlay.gd", "src/main.gd", "src/ui/coin_icon.gd",
-  "src/ui/pause_menu.gd", "src/core/act_ambient.gd", "tests/fx_gallery.gd"
+  "src/ui/pause_menu.gd", "src/core/act_ambient.gd", "tests/fx_gallery.gd",
+  "src/abilities/ability.gd",
+  "src/abilities/evo/evo_module.gd", "src/abilities/evo/evo_registry.gd",
+  "src/abilities/evo/flash_bombs_evo.gd"
 )
 $SPACE = @(
   "autoload/audio_manager.gd", "autoload/db.gd", "autoload/meta.gd",
   "data/seal/global_seal_data.gd", "data/seal/hero_seal_data.gd",
-  "src/abilities/ability.gd", "src/abilities/evo_prims.gd",
+  "src/abilities/evo_prims.gd",
+  "src/abilities/evo/flailing_whip_evo.gd", "src/abilities/evo/katana_evo.gd",
+  "src/abilities/evo/six_shooter_evo.gd", "src/abilities/evo/hand_cannon_evo.gd",
+  "src/abilities/evo/pirate_crew_evo.gd", "src/abilities/evo/paladin_evo.gd",
   "src/abilities/passive_behaviors.gd", "src/abilities/weapon_behaviors.gd",
   "src/core/act_manager.gd", "src/core/chest_manager.gd", "src/core/coin_manager.gd",
   "src/core/descent.gd", "src/core/ground_layer.gd", "src/core/projectile_manager.gd",
@@ -42,7 +48,8 @@ $SPACE = @(
   "src/ui/gameover_screen.gd", "src/ui/hud.gd", "src/ui/levelup_screen.gd",
   "src/ui/main_menu.gd", "src/ui/menu_music_curve.gd", "src/ui/options_panel.gd",
   "src/ui/seal_screen.gd", "src/ui/touch_controls.gd", "src/ui/ui.gd",
-  "tests/smoke.gd", "tools/check_evo.gd"
+  "tests/smoke.gd", "tests/script_sweep.gd", "tests/_selftest_broken.gd",
+  "tools/check_evo.gd"
 )
 $FLAT = @(
   "data/defs/ability_def.gd", "data/defs/act_def.gd", "data/defs/character_def.gd",

@@ -14,3 +14,4 @@ branches = [{"id": "a", "name": "Peck Fury", "desc": "Add and scale damage attac
 level_scaling = {"interval": ["mul", 0.95]}
 max_level = 8
 color = Color(1.000, 1.000, 1.000, 1)
+caps = {"interval": [2.5, 999.0], "fear_radius": [0.0, 190.0], "fear_time": [0.0, 1.8]}

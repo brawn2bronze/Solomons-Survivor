@@ -290,6 +290,55 @@ func _decal(d: Dictionary) -> void:
                     pts.append(pos + Vector2.from_angle(a2) * rr)
                 draw_polyline(pts, col, 1.0)
             draw_circle(pos, r, Color(0.9, 0.9, 1.0, 0.05))
+        "radiant_road":
+            var rt: float = float(d.get("t", 0.0))
+            var rlife: float = float(d.get("life", 3.0))
+            var fade: float = clampf((rlife - rt) / 0.6, 0.0, 1.0)
+            var rr: float = float(d.get("r", 20.0))
+            var pulse: float = 0.5 + 0.5 * sin(_time * 4.0 + pos.x * 0.03)
+            draw_circle(pos, rr, Color(1.0, 0.86, 0.34, 0.10 * fade))
+            draw_arc(pos, rr, 0.0, TAU, 24, Color(1.0, 0.92, 0.55, (0.40 + 0.15 * pulse) * fade), 2.0)
+            draw_arc(pos, rr * 0.55, 0.0, TAU, 16, Color(1.0, 1.0, 0.82, 0.24 * fade), 1.0)
+        "consecration":
+            var ct: float = float(d.get("t", 0.0))
+            var clife: float = float(d.get("life", 5.0))
+            var cr: float = float(d.get("r", 100.0))
+            var cfade: float = clampf((clife - ct) / 0.45, 0.0, 1.0) * clampf(ct * 6.0, 0.0, 1.0)
+            var cpulse: float = 0.5 + 0.5 * sin(_time * 3.5 + pos.x * 0.02)
+            draw_circle(pos, cr, Color(1.0, 0.9, 0.55, 0.065 * cfade))
+            draw_circle(pos, cr * 0.7, Color(1.0, 0.82, 0.38, 0.055 * cfade))
+            draw_arc(pos, cr, 0.0, TAU, 48, Color(1.0, 0.94, 0.66, (0.38 + 0.16 * cpulse) * cfade), 2.0)
+            draw_arc(pos, cr * 0.7, 0.0, TAU, 36, Color(1.0, 0.88, 0.45, 0.28 * cfade), 1.2)
+            for i in 8:
+                var ca: float = TAU * float(i) / 8.0 + _time * 0.18
+                draw_line(pos + Vector2.from_angle(ca) * cr * 0.34, pos + Vector2.from_angle(ca) * cr * 0.78, Color(1.0, 0.95, 0.7, 0.22 * cfade), 1.2)
+            draw_circle(pos, 3.0 + cpulse * 1.5, Color(1.0, 1.0, 0.84, 0.5 * cfade))
+        "sanctuary":
+            var st: float = float(d.get("t", 0.0))
+            var slife: float = float(d.get("life", 5.0))
+            var sr: float = float(d.get("r", 160.0))
+            var sfade: float = clampf((slife - st) / 0.5, 0.0, 1.0) * clampf(st * 5.0, 0.0, 1.0)
+            var spulse: float = 0.5 + 0.5 * sin(_time * 3.0)
+            draw_circle(pos, sr, Color(0.9, 0.95, 1.0, 0.075 * sfade))
+            draw_arc(pos, sr, 0.0, TAU, 56, Color(1.0, 0.98, 0.82, (0.45 + 0.18 * spulse) * sfade), 3.0)
+            draw_arc(pos, sr * 0.72, 0.0, TAU, 40, Color(0.95, 1.0, 0.9, 0.24 * sfade), 1.5)
+            draw_arc(pos, sr * 0.4, 0.0, TAU, 28, Color(1.0, 0.98, 0.85, 0.18 * sfade), 1.0)
+            for i in 12:
+                var sa: float = TAU * float(i) / 12.0 - _time * 0.12
+                draw_line(pos + Vector2.from_angle(sa) * sr * 0.5, pos + Vector2.from_angle(sa) * sr * 0.98, Color(1.0, 0.98, 0.86, 0.18 * sfade), 1.5)
+        "judgement_tell":
+            var jt: float = float(d.get("t", 0.0))
+            var jlife: float = float(d.get("life", 1.2))
+            var jr: float = float(d.get("r", 900.0))
+            var jk: float = clampf(jt / maxf(jlife, 0.01), 0.0, 1.0)
+            var jpulse: float = 0.5 + 0.5 * sin(_time * 10.0)
+            draw_circle(pos, jr, Color(1.0, 0.9, 0.5, 0.018 + 0.022 * jk))
+            for jf in [0.35, 0.65, 1.0]:
+                draw_arc(pos, jr * float(jf), 0.0, TAU, 64, Color(1.0, 0.92, 0.6, (0.12 + 0.28 * jk) * (1.0 - float(jf) * 0.35)), 2.0)
+            for i in 16:
+                var ja: float = TAU * float(i) / 16.0 + _time * 0.35
+                draw_line(pos + Vector2.from_angle(ja) * jr * 0.38, pos + Vector2.from_angle(ja) * jr * (0.82 + 0.08 * jpulse), Color(1.0, 0.94, 0.62, 0.08 + 0.16 * jk), 2.0)
+            draw_circle(pos, 10.0 + jk * 20.0, Color(1.0, 0.96, 0.7, 0.25 + 0.35 * jk))
         "turd":
             var poison: bool = bool(d.get("poison", false))
             var t: float = float(d["t"])

@@ -24,6 +24,9 @@ var _chest_pick: OptionButton
 var _level_cards: Array = []
 var _perf: Label
 var _coin_field: LineEdit
+var _kit_branch := {}
+var _kit_e1 := {}
+var _kit_e2 := {}
 
 
 func setup(world_ref) -> void:
@@ -80,6 +83,27 @@ func setup(world_ref) -> void:
 	v.add_child(_row_buttons(["+150", "+300", "Kill all"], [_on_spawn150, _on_spawn300, _on_kill_all]))
 	v.add_child(UI.label("PROGRESS", 13, UI.PURPLE))
 	v.add_child(_row_buttons(["Heal", "Level+1", "Max build"], [_on_heal, _on_levelup, _on_maxbuild]))
+	v.add_child(UI.label("KIT / EVOLUTIONS", 13, UI.PURPLE))
+	for kind in ["weapon", "passive"]:
+		var klabel := "Weapon" if kind == "weapon" else "Passive"
+		var kbr := OptionButton.new()
+		kbr.custom_minimum_size = Vector2(280, 32)
+		kbr.add_item(klabel + " branch: A", 0)
+		kbr.add_item(klabel + " branch: B", 1)
+		kbr.item_selected.connect(_on_kit_branch.bind(kind))
+		v.add_child(kbr)
+		_kit_branch[kind] = kbr
+		var ke1 := OptionButton.new()
+		ke1.custom_minimum_size = Vector2(280, 32)
+		v.add_child(ke1)
+		_kit_e1[kind] = ke1
+		var ke2 := OptionButton.new()
+		ke2.custom_minimum_size = Vector2(280, 32)
+		v.add_child(ke2)
+		_kit_e2[kind] = ke2
+	v.add_child(_row_buttons(["Apply W", "Apply P"], [_on_kit_apply_w, _on_kit_apply_p]))
+	_fill_kit_evos("weapon")
+	_fill_kit_evos("passive")
 	v.add_child(UI.label("UPGRADES (direct grant)", 13, UI.PURPLE))
 	v.add_child(UI.label("Level-up catalog", 14, UI.DIM))
 	_level_pick = OptionButton.new()
@@ -406,3 +430,59 @@ func _on_t60() -> void:
 
 func _on_rate_zero() -> void:
 	_mult_slider.value = 0.0
+
+
+func _on_kit_branch(_i: int, kind: String) -> void:
+	_fill_kit_evos(kind)
+
+
+## Repopulate the two evo pickers for `kind` from the selected branch's authored tables.
+func _fill_kit_evos(kind: String) -> void:
+	if world == null or world.player == null:
+		return
+	var ab: Ability = world.player.weapon if kind == "weapon" else world.player.passive
+	if ab == null or ab.def == null:
+		return
+	var branches: Array = ab.def.branches
+	if branches.is_empty():
+		return
+	var bi: int = clampi(int(_kit_branch[kind].get_selected_id()), 0, branches.size() - 1)
+	var br: Dictionary = branches[bi]
+	for tier in [1, 2]:
+		var pick: OptionButton = _kit_e1[kind] if tier == 1 else _kit_e2[kind]
+		pick.clear()
+		var table: Array = br.get("evo1" if tier == 1 else "evo2", [])
+		for i in table.size():
+			var opt: Dictionary = table[i]
+			pick.add_item("[T%d] %s" % [tier, String(opt.get("name", "?"))], i)
+			pick.set_item_metadata(i, i)
+		if pick.item_count > 0:
+			pick.select(0)
+
+
+func _kit_evos(kind: String) -> Array:
+	var out: Array = []
+	for tier in [1, 2]:
+		var pick: OptionButton = _kit_e1[kind] if tier == 1 else _kit_e2[kind]
+		var idx := 0
+		if pick.item_count > 0 and pick.selected >= 0:
+			idx = int(pick.get_item_metadata(pick.selected))
+		out.append(idx)
+	return out
+
+
+func _on_kit_apply_w() -> void:
+	_apply_kit("weapon")
+
+
+func _on_kit_apply_p() -> void:
+	_apply_kit("passive")
+
+
+func _apply_kit(kind: String) -> void:
+	if world == null or world.player == null:
+		return
+	var ev := _kit_evos(kind)
+	var bi: int = clampi(int(_kit_branch[kind].get_selected_id()), 0, 1)
+	world.dev_set_kit(kind, 16, bi, int(ev[0]), int(ev[1]))
+	world.announce("DEV: %s kit -> branch %s, evo %d/%d" % [kind, "AB"[bi], int(ev[0]), int(ev[1])], false)

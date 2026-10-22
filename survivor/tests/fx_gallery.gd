@@ -320,7 +320,7 @@ func _on_publish() -> void:
 		return
 	sprite_path = sprite_path.replace("\\", "/")
 	if not sprite_path.begins_with("res://"):
-		_status.text = "Path must live in the project: res://art/fx/name.png (no C:\\ paths — they break exports)."
+		_status.text = "Path must live in the project: art/fx/<name>.png (no C:\\ paths — they break exports)."
 		return
 	if not ResourceLoader.exists(sprite_path):
 		_status.text = "PNG not found: %s (drop it in art/fx/ first)." % sprite_path

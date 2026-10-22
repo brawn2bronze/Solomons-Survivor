@@ -19,3 +19,4 @@ icon_frames = 1
 icon_fps = 8.0
 preview_kind = "static"
 anims = {}
+caps = {"max_minions": [0, 6], "duration": [0.0, 16.0]}

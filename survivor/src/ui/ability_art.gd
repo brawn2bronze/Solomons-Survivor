@@ -50,6 +50,30 @@ static func icon_for_ability(def, branch: int = -1) -> Dictionary:
     return {"path": path, "frames": frames, "fps": fps, "preview": preview, "fallback": fallback}
 
 
+## Resolved card art for an evolution pick. Prefers the per-option `icon` field, then
+## res://art/evo/<id>.png when that file exists, and finally falls back to the branch art.
+static func icon_for_evo(def, branch: int, tier: int, idx: int) -> Dictionary:
+    var evo_id := ""
+    var evo: Dictionary = {}
+    var branches = def.get("branches")
+    if branches is Array and branch >= 0 and branch < branches.size():
+        var br = branches[branch]
+        if br is Dictionary:
+            var key := "evo1" if tier <= 1 else "evo2"
+            var table = br.get(key, [])
+            if table is Array and idx >= 0 and idx < table.size() and table[idx] is Dictionary:
+                evo = table[idx]
+                evo_id = String(evo.get("id", ""))
+    var explicit := String(evo.get("icon", ""))
+    if explicit != "" and ResourceLoader.exists(explicit):
+        return {"path": explicit, "frames": maxi(1, int(evo.get("icon_frames", 1))), "fps": float(evo.get("icon_fps", 8.0)), "preview": "static", "fallback": false}
+    if evo_id != "":
+        var path := "res://art/evo/%s.png" % evo_id
+        if ResourceLoader.exists(path):
+            return {"path": path, "frames": 1, "fps": 8.0, "preview": "static", "fallback": false}
+    return icon_for_ability(def, branch)
+
+
 static func icon_for_upgrade(up) -> Dictionary:
     var path := String(up.icon)
     var fallback := false

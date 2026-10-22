@@ -23,30 +23,37 @@ def scripts():
 
 
 # 1. one indentation style per file (Godot rejects mixed tabs/spaces in a block)
+def code_lines(text):
+    """(line number, line) for real code only - lines inside a \"\"\" block are skipped.
+
+    Shader source and other multi-line strings are written with their own indentation
+    (tabs in a space file, spaces in a tab file) and say nothing about the file's style.
+    """
+    in_str = False
+    for i, l in enumerate(text.split("\n"), 1):
+        if l.count('"""') % 2 == 1:      # opens or closes a multi-line string
+            in_str = not in_str
+            continue
+        if in_str:
+            continue
+        yield i, l
+
+
 for rel in scripts():
     text = read(rel).replace("\r\n", "\n")
-    tab_lines = [i + 1 for i, l in enumerate(text.split("\n")) if l.startswith("\t")]
-    space_lines = [i + 1 for i, l in enumerate(text.split("\n")) if l.startswith("    ")]
+    tab_lines = [i for i, l in code_lines(text) if l.startswith("\t")]
+    space_lines = [i for i, l in code_lines(text) if l.startswith("    ")]
     if tab_lines and space_lines:
-        # shader/multiline strings legitimately use spaces inside tab files (world.gd); flag only if code lines mix
-        in_str = False
-        mixed = []
-        for i, l in enumerate(text.split("\n")):
-            if l.count('"""') % 2 == 1:
-                in_str = not in_str
-                continue
-            if not in_str and l.startswith("    ") and tab_lines:
-                mixed.append(i + 1)
-        if mixed and tab_lines:
-            errors.append(f"{rel}: mixes tab and space indentation (space-indented lines outside strings: {mixed[:5]})")
+        errors.append(f"{rel}: mixes tab and space indentation (tab lines {tab_lines[:3]}, space lines {space_lines[:3]})")
 
-# 2. := on a Variant expression (the project checker fails these)
-BAD_INFER = re.compile(r":=\s*[A-Za-z_][\w.]*(\[|\.get\()")   # starts with a Dictionary/array read (casts like float(...) are typed and fine)
-for rel in scripts():
-    for i, line in enumerate(read(rel).replace("\r\n", "\n").split("\n"), 1):
-        s = line.strip()
-        if s.startswith("var ") and BAD_INFER.search(s) and "as " not in s:
-            warnings.append(f"{rel}:{i}: ':=' on a Dictionary/Variant read - use an explicit type: {s[:90]}")
+# 2. ':=' on a Variant expression - the rule lives in tools/gdscript_lint.py (single owner,
+#    imported by check_project.py too). Delegating keeps the two checkers from drifting apart
+#    and removes the false positives of the old regex here (typed array subscripts are fine).
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+import gdscript_lint
+for f in gdscript_lint.lint_project(ROOT):
+    if f.code in ("GDS101", "GDS102"):
+        warnings.append(f"{f.path}:{f.line}: {f.message}")
 
 # 3. no lambdas in tweens
 for rel in scripts():
@@ -138,8 +145,10 @@ for k in sorted(set_keys - read_keys):
     errors.append(f"a listing sets flag '{k}' that no behavior reads")
 
 # 8. boss def sanity
+# The black market boss uses the "boss_broker" behavior (enemy_manager.gd match arm), not the
+# plain "boss" one - the old expectation here was stale and flagged a correct file.
 boss = read("data/enemies/bone_broker.tres")
-for need in ('is_elite = true', 'boss_time = ', 'boss_unlock = "black_market"', 'behavior = "boss"', 'can_hit_flying = true'):
+for need in ('is_elite = true', 'boss_time = ', 'boss_unlock = "black_market"', 'behavior = "boss_broker"', 'can_hit_flying = true'):
     if need not in boss:
         errors.append(f"bone_broker.tres missing: {need}")
 
@@ -152,5 +161,7 @@ for w in warnings:
     print("WARN ", w)
 for e in errors:
     print("ERROR", e)
+STRICT = "--strict" in sys.argv          # warnings count as failures (used by check_all.ps1 -Strict)
+failed = bool(errors) or (STRICT and bool(warnings))
 print(f"\n{len(errors)} error(s), {len(warnings)} warning(s)")
-sys.exit(1 if errors else 0)
+sys.exit(1 if failed else 0)

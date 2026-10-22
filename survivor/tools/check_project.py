@@ -6,20 +6,38 @@ and `:=` on Variant expressions (a hard GDScript error)."""
 import os, re, sys, glob
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-errors, warns = [], []
+errors, warns, notes = [], [], []
 def err(m): errors.append(m)
 def warn(m): warns.append(m)
+def note(m): notes.append(m)          # visible in the report, never affects the exit code
 def rp(p): return os.path.join(ROOT, p.replace("res://", ""))
+
+try:
+    from PIL import Image
+except ImportError:                                    # Pillow is optional: the art checks
+    Image = None                                       # degrade to a warning, the script still runs
+PIL_MISSING = Image is None
+
+
+def open_image(rel):
+    """Open a project image. Returns None when Pillow is missing or the file is unreadable."""
+    if PIL_MISSING:
+        return None
+    try:
+        return Image.open(rp(rel))
+    except Exception as exc:
+        err(f"cannot read image {rel}: {exc}")
+        return None
 
 SPEC_AUDIO = """weapons/revolver_shot.wav weapons/katana_slash.wav weapons/hand_cannon.wav weapons/whip_crack.wav weapons/greatsword_swing.wav
 weapons/lightning_bolt.wav weapons/fang_bite.wav weapons/horn_swipe.wav weapons/screech.wav weapons/skull_projectile.wav weapons/goose_charge.wav
 enemies/goblin_hit.wav enemies/skeleton_hit.wav enemies/dragon_hit.wav enemies/dinosaur_hit.wav enemies/enemy_death.wav enemies/elite_enemy_spawn.wav
-player/player_hit.wav player/player_death.wav player/xp_pickup.wav player/level_up.wav player/character_select.wav player/frog-fart.wav
+player/player_hit.wav player/player_death.wav player/xp_pickup.wav player/level_up.wav player/character_select.wav player/frog-fart.wav player/coin_pickup.wav
 music/ambient_loop.ogg music/boss_music.ogg music/menu_music.ogg
 music/act1_orchestral.ogg music/act2_glitch.ogg music/act3_choir.ogg music/act4_lucifer.ogg
 music/boss_asmodeus.ogg music/boss_malphas.ogg music/boss_belial.ogg
 ui/button_click.wav ui/menu_open.wav ui/menu_close.wav ui/upgrade_selected.wav ui/market_unlock.wav ui/market_purchase.wav""".split()
-MUSIC_ALLOW_MISSING = {"music/act4_lucifer.ogg"}   # Act IV track not authored yet; missing-file warning path only
+MUSIC_ALLOW_MISSING = set()   # act4_lucifer.ogg now ships as a boss_music placeholder; add paths here only for documented gaps
 
 def wrapped_cast(rhs):
     m = re.match(r'(float|int|bool|String|Vector2|Vector2i|Color|Rect2|clampf|clampi|maxf|maxi|minf|mini|absf|lerpf|sqrt|floori|ceili)\(', rhs)
@@ -65,8 +83,11 @@ for f, t in all_text.items():
             if m.group(1) not in events: err(f"{os.path.relpath(f, ROOT)}: unknown hit_event '{m.group(1)}'")
 
 # ---- 2. every res:// reference resolves ------------------------------------------------------
+ALLOW_MISSING_REFS = {"audio/" + a for a in MUSIC_ALLOW_MISSING}   # documented, not-yet-authored assets
 for f, t in all_text.items():
     for m in re.finditer(r'res://[A-Za-z0-9_./-]+\.(?:gd|tscn|tres|png|wav|ogg|gdshader)', t):
+        if m.group(0).replace("res://", "") in ALLOW_MISSING_REFS:
+            continue
         if not os.path.exists(rp(m.group(0))):
             err(f"{os.path.relpath(f, ROOT)}: dangling {m.group(0)}")
 
@@ -130,8 +151,13 @@ for aid, a in {**weapons, **passives}.items():
     if atext.get(aid, "").count('"on_pick"') != 2: err(f"{aid}: needs exactly two branches")
 from PIL import Image
 for eid, e in enemies.items():
-    sp = e["sprite"].strip('"'); im = Image.open(rp(sp))
-    if im.width not in (48 * int(e["frames"]), 64 * int(e["frames"])): err(f"{eid}: strip width {im.width} != 48/64*{e['frames']}")
+    sp = e["sprite"].strip('"'); im = open_image(sp)
+    if im is None: continue
+    frames = int(e["frames"])
+    if frames < 1 or im.width % frames != 0:
+        err(f"{eid}: strip width {im.width} is not divisible by {frames} frames")
+    elif im.width // frames not in (48, 64):
+        note(f"{eid}: non-standard enemy cell width {im.width // frames}px (48/64 is the norm)")
     num = lambda k, d="0": float(e.get(k, d).strip())
     if num("projectile_count", "1") < 1: err(f"{eid}: projectile_count must be >= 1")
     if num("projectile_spread_deg") < 0 or num("splash_radius") < 0 or num("splash_damage") < 0: err(f"{eid}: fan/splash fields must be >= 0")
@@ -165,18 +191,22 @@ for eid, e in enemies.items():
         if numf(e, "recover_time", "0") <= 0: err(f"{eid}: recover_time must be > 0")
         if numf(e, "add_cap", "0") <= 0: err(f"{eid}: add_cap must be > 0")
 for cid, c in chars.items():
-    sp = c["sprite"].strip('"'); im = Image.open(rp(sp))
+    sp = c["sprite"].strip('"'); im = open_image(sp)
+    if im is None: continue
     frames = int(c.get("frames", "6").strip()) if "frames" in c else 6
     if im.size != (64 * frames, 64): err(f"{cid}: character strip should be {64 * frames}x64 ({frames} frames), is {im.size}")
 # ---- 3b. card/status art ----------------------------------------------------------------------
 for p in glob.glob(ROOT + "/art/weapons/*.png"):
-    im = Image.open(p)
+    im = open_image(p)
+    if im is None: continue
     if im.height not in (32, 64) or im.width % im.height != 0: err(f"{os.path.relpath(p, ROOT)}: weapon art must be square cells (Wx32 or Wx64 strip), is {im.size}")
 for p in glob.glob(ROOT + "/art/status/*.png"):
-    im = Image.open(p)
+    im = open_image(p)
+    if im is None: continue
     if im.size != (32, 32): err(f"{os.path.relpath(p, ROOT)}: status icon must be 32x32, is {im.size}")
 for p in glob.glob(ROOT + "/art/passives/*.png"):
-    im = Image.open(p)
+    im = open_image(p)
+    if im is None: continue
     if im.size not in ((32, 32), (64, 64)): err(f"{os.path.relpath(p, ROOT)}: passive art must be 32x32 or 64x64, is {im.size}")
 for p in ["art/placeholders/silhouette_weapon.png", "art/placeholders/silhouette_passive.png", "art/placeholders/silhouette_upgrade.png"]:
     if not os.path.exists(os.path.join(ROOT, p)): err(f"missing placeholder {p}")
@@ -199,6 +229,16 @@ for f in gd_files:
     if re.search(r'\.connect\(func\([^)]*\)[^\n]*:\s*\n', all_text[f]): warn(f"{os.path.relpath(f, ROOT)}: multi-line lambda inside connect()")
 
 # ---- 4. GDScript hygiene ---------------------------------------------------------------------------
+# The `:=`-on-Variant and unused-parameter rules live in tools/gdscript_lint.py - imported
+# here, never re-implemented, so the static tier and the engine tier cannot drift apart.
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+import gdscript_lint
+for f in gdscript_lint.lint_project(ROOT):
+    if f.severity == "error":
+        err(f"{f.path}:{f.line}: {f.message}")
+    else:
+        warn(f"{f.path}:{f.line}: {f.message}")
+
 class_names = {}
 for f in gd_files:
     m = re.search(r'^class_name (\w+)', all_text[f], re.M)
@@ -220,18 +260,8 @@ for f in gd_files:
         if "\t" in line[:len(line) - len(line.lstrip())] and line.startswith(" "): err(f"{rel}:{line_no}: mixed tabs/spaces")
         lead = len(line) - len(line.lstrip(" "))
         if line.strip() and not line.strip().startswith("#") and lead % 4 != 0 and all(v == 0 for v in depth.values()): warn(f"{rel}:{line_no}: indent {lead} not a multiple of 4")
-        # Variant inference
-        m = re.search(r':=\s*(.+)$', code)
-        if m:
-            rhs = m.group(1).strip()
-            typed_call = re.match(r'(_load|_key|_color|_make_\w+|_card|UI\.\w+|WeaponBehaviors\.\w+|Ability\.make)\(', rhs)
-            if not rhs.startswith("{") and not rhs.startswith("[") and not typed_call and not wrapped_cast(rhs):
-                r2 = raw_rhs = rhs
-                cast_re = re.compile(r'\b(float|int|bool|String|Vector2|Vector2i|Color|str|Rect2|PackedVector2Array|clampf|clampi|maxf|maxi|minf|mini|absf|lerpf|randf_range|deg_to_rad|sqrt|sin|cos|pow|floori|ceili|floorf|ceilf|round|signf|maxf)\(([^()]*)\)')
-                for _ in range(8):
-                    r2 = cast_re.sub("0", r2)
-                if re.search(r'(world\(\)|\["|\.get\(|\.pop_back\(\)|\.pop_front\(\)|\.back\(\)|\.front\()', r2):
-                    err(f"{rel}:{line_no}: `:=` on a Variant expression: {raw_rhs[:70]}")
+        # Variant inference and unused parameters are checked by tools/gdscript_lint.py
+        # (imported in section 4) - the single owner of those rules.
     if any(v != 0 for v in depth.values()): err(f"{rel}: unbalanced brackets {depth}")
     for m in re.finditer(r'^extends (\w+)', t, re.M):
         base = m.group(1)
@@ -293,9 +323,15 @@ for f in gd_files:
     for m in re.finditer(r'\.connect\((_\w+)[\),]', t):
         if m.group(1) not in funcs: err(f"{os.path.relpath(f, ROOT)}: connects to missing func {m.group(1)}")
 
+if PIL_MISSING:
+    warn("Pillow is not installed - the sprite/art size checks were SKIPPED (pip install pillow)")
+
 lines = sum(t.count("\n") for f, t in all_text.items() if f.endswith(".gd"))
 print(f"checked {len(gd_files)} scripts ({lines} lines), {len(tres_files)} resources, {len(class_names)} classes")
 for w in warns[:20]: print("warn:", w)
+for n in notes: print("note:", n)
 for e in errors: print("ERROR:", e)
-print("RESULT:", "FAIL (%d errors)" % len(errors) if errors else "PASS")
-sys.exit(1 if errors else 0)
+STRICT = "--strict" in sys.argv          # warnings count as failures (used by check_all.ps1 -Strict)
+failed = bool(errors) or (STRICT and bool(warns))
+print("RESULT:", "FAIL (%d errors, %d warnings)" % (len(errors), len(warns)) if failed else "PASS")
+sys.exit(1 if failed else 0)

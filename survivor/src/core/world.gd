@@ -325,7 +325,6 @@ func dev_set_kit(kind: String, level: int, branch: int, e1: int, e2: int) -> voi
 			ab.apply_evo(1, clampi(e1, 0, 7))
 		if ab.needs_evo(2) and ab.evo2 < 0:
 			ab.apply_evo(2, clampi(e2, 0, 7))
-	refresh()
 
 
 func dev_set_godmode(on: bool) -> void:
@@ -689,7 +688,7 @@ func roll_chest_choices() -> Array:
 				tag += " UPGRADE"
 			else:
 				sub = "Already maxed"
-		var desc: String = "%s\n\n%s" % [def.description, UI.describe_ops(def.level_scaling)]
+		var desc: String = _desc_ops(String(def.description), def.level_scaling)
 		cards.append(_card("chest", "chest_" + w, def.display_name, tag, sub, desc, def.color, {"weapon_id": w}))
 	return cards
 
@@ -943,6 +942,8 @@ func _card_art(ch: Dictionary) -> Dictionary:
 	if t == "weapon" or t == "passive":
 		var def = DB.ability(String(ch.get("id", "")))
 		if def != null:
+			if int(ch.get("tier", 0)) > 0 and ch.has("evo"):
+				return AbilityArt.icon_for_evo(def, branch, int(ch["tier"]), int(ch["evo"]))
 			return AbilityArt.icon_for_ability(def, branch)
 	elif t == "chest":
 		var wdef = DB.weapons.get(String(ch.get("weapon_id", "")))
@@ -956,6 +957,13 @@ func _card_art(ch: Dictionary) -> Dictionary:
 
 
 ## Single next-level card for a kit ability. Branch/evolution-ready abilities
+## Card body: base text plus an optional ops line. Empty ops leave no
+## dangling separator.
+func _desc_ops(base: String, ops: Dictionary) -> String:
+	var d := UI.describe_ops(ops)
+	return base if d.is_empty() else "%s\n\n%s" % [base, d]
+
+
 ## still level here (no gates) — their pairs are owed as bonus cards after
 ## the next pick (see _owed_cards), never forced into the draft.
 func _ability_cards(ab: Ability, kind: String) -> Array:
@@ -963,7 +971,9 @@ func _ability_cards(ab: Ability, kind: String) -> Array:
 	if ab.can_level():
 		var desc2 := UI.describe_ops(ab.def.level_scaling)
 		if ab.branch >= 0:
-			desc2 += "\n" + UI.describe_ops(ab.def.branches[ab.branch]["per_level"])
+			var plops := UI.describe_ops(ab.def.branches[ab.branch]["per_level"])
+			if not plops.is_empty():
+				desc2 = plops if desc2.is_empty() else desc2 + "\n" + plops
 		out.append(_card(kind, ab.def.id, ab.def.display_name, "POWER", "Lv %d -> %d" % [ab.level, ab.level + 1], desc2, ab.def.color, {"branch": -1}))
 	return out
 
@@ -976,7 +986,7 @@ func _owed_cards(ab: Ability, kind: String, tier: int) -> Array:
 	if tier == 0:
 		for b in 2:
 			var br: Dictionary = ab.def.branches[b]
-			var desc: String = "%s\n\n%s" % [br["desc"], UI.describe_ops(br["on_pick"])]
+			var desc: String = _desc_ops(String(br["desc"]), br["on_pick"])
 			out.append(_card(kind, ab.def.id, br["name"], "PATH", "%s  Lv %d (free)" % [ab.def.display_name, ab.level], desc, ab.def.color, {"branch": b, "evolution": true, "evo_kind": kind, "tier": 0}))
 		return out
 	var tag := "EVOLUTION" if tier == 1 else "FINAL"
@@ -987,7 +997,7 @@ func _owed_cards(ab: Ability, kind: String, tier: int) -> Array:
 			ops[k2] = (opt.get("ops2", {}) as Dictionary)[k2]
 		for k3 in (opt.get("ops3", {}) as Dictionary).keys():
 			ops[k3] = (opt.get("ops3", {}) as Dictionary)[k3]
-		var desc2: String = "%s\n\n%s" % [String(opt.get("desc", "")), UI.describe_ops(ops)]
+		var desc2: String = _desc_ops(String(opt.get("desc", "")), ops)
 		out.append(_card(kind, ab.def.id, String(opt.get("name", "Evolve")), tag, "%s  %s Lv %d (free)" % [ab.def.display_name, ab.branch_name(), ab.level], desc2, ab.def.color, {"branch": ab.branch, "evolution": true, "evo_kind": kind, "tier": tier, "evo": e}))
 	return out
 
@@ -1053,7 +1063,7 @@ func build_choices() -> Array:
 		elif int(wdef.rarity) == 1:
 			w = 0.5 * (1.0 + luck)
 		var sub := "Lv %d -> %d" % [cw.level, cw.level + 1]
-		var desc: String = "%s\n\n%s" % [wdef.description, UI.describe_ops(wdef.level_scaling)]
+		var desc: String = _desc_ops(String(wdef.description), wdef.level_scaling)
 		wild.append([_card("chest", "chest_" + String(cw.def.id), wdef.display_name, "WILD", sub, desc, wdef.color, {"weapon_id": String(cw.def.id)}), w])
 	var cards: Array = []
 	var taken: Array[String] = []
