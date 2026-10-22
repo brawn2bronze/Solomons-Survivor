@@ -163,7 +163,7 @@ class MeleeSwipe extends Ability:
         if t > 0.0:
             return
         var r := float(p["radius"]) * player.stat("area")
-        var tgt: EnemyManager.E = world().enemies.nearest(player.global_position, r * 1.3)
+        var tgt: EnemyManager.E = world().enemies.nearest(player.global_position, r * 1.3, {})
         if tgt == null:
             t = 0.04
             return
@@ -190,7 +190,10 @@ class MeleeSwipe extends Ability:
         if not hits.is_empty():
             Game.shake(2.5 if heavy else 1.2)
             if heavy:
-                Game.hit_stop(0.035, 0.05)
+                var now: float = Time.get_ticks_msec() / 1000.0
+                if not p.has("last_heavy") or now - float(p.get("last_heavy", 0.0)) > 0.60:
+                    p["last_heavy"] = now
+                    Game.hit_stop(0.035, 0.05)
         player.impulse(d * (60.0 if heavy else 30.0))
         if flags.get("wave", false):
             world().projectiles.fire(ProjectileManager.Kind.HOLY, origin, d, 380.0, dmg(float(p["wave_damage"])), 24.0, 999, 0.75, Color(1.0, 0.93, 0.6), {"skin": AbilityArt.weapon_proj_skin(def), "w": 0.75, "knock": 60.0})
@@ -254,23 +257,24 @@ class ChainLightning extends Ability:
             t = 0.05
             return
         t = float(p["cooldown"]) * cd()
-        var used: Array = []
+        var used: Dictionary = {}
         var bolts: int = player.scaled_count(1)
         for b in bolts:
             var first: EnemyManager.E = tgt if b == 0 else world().enemies.nearest(player.global_position, float(p["range"]), used)
             if first == null:
                 break
-            used.append(first)
+            used[first.uid] = true
             _zap(first, b)
         Audio.sfx("lightning_bolt", -5.0)
 
     func _zap(first: EnemyManager.E, idx: int) -> void:
         var col := Color(0.55, 0.85, 1.0)
-        var hit: Array = [first]
+        var hit: Dictionary = {}
+        hit[first.uid] = true
         var from := player.fire_origin(idx, (first.pos - player.global_position).normalized()) + Vector2(0, -6)
         var cur: EnemyManager.E = first
         for i in int(p["chains"]) + 1:
-            world().enemies.damage(cur, dmg() * (1.0 if i == 0 else 0.85), Vector2.ZERO, 0.0, col)
+            world().enemies.damage(cur, dmg() * (1.0 if i == 0 else 0.8), Vector2.ZERO, 0.0, col)
             world().fx.bolt(WeaponBehaviors.jagged(from, cur.pos + Vector2(0, -8)), col, 0.2)
             world().fx.attack_flourish(player.global_position, cur.pos - player.global_position)
             world().fx.emit(cur.pos + Vector2(0, -8), Vector2.ZERO, 0.1, 9.0, Color(0.85, 0.95, 1.0), 1, 0.0)
@@ -278,7 +282,7 @@ class ChainLightning extends Ability:
             var nxt: EnemyManager.E = world().enemies.nearest(cur.pos, float(p["chain_range"]), hit)
             if nxt == null:
                 break
-            hit.append(nxt)
+            hit[nxt.uid] = true
             cur = nxt
         world().fx.strike(first.pos)
         if flags.get("orb", false):

@@ -35,3 +35,4 @@ enum Rarity { COMMON = 0, RARE = 1, LEGENDARY = 2 }
 ## "flags": {}}. Applied cumulatively once `level` is reached. Pickup (chest)
 ## weapons never read this: their evolution path is the Black Market mods.
 @export var branch_milestones: Array = []
+@export var caps: Dictionary = {}

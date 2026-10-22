@@ -158,6 +158,58 @@ func spawn_zone(pos: Vector2, radius: float, dmg: float, delay: float, opts: Dic
         p.trail[i] = pos
 
 
+## Player-side ground trap zone (evolution primitive 4). Damages enemies that
+## enter while alive; persists for `duration` seconds. opts: color, tick_interval,
+## tick_damage (defaults to dmg per tick), src (hit-gate key).
+func spawn_trap_zone(pos: Vector2, radius: float, dmg: float, duration: float, opts: Dictionary = {}) -> void:
+    var p: Pr = _take()
+    if p == null:
+        return
+    p.kind = Kind.ZONE
+    p.pos = pos
+    p.vel = Vector2.ZERO
+    p.dmg = dmg
+    p.radius = radius
+    p.zone_target = radius
+    p.life = maxf(duration, 0.1)
+    p.color = opts.get("color", Color(0.4, 0.9, 0.4))
+    p.air = false
+    p.rehit = float(opts.get("tick_interval", 0.5))
+    p.skin["trap"] = true
+    p.skin["trap_src"] = String(opts.get("src", ""))
+    p.skin["trap_radius"] = radius
+    for i in p.trail.size():
+        p.trail[i] = pos
+
+
+## Evolution primitive 6: intercept hostile projectiles in a radius.
+## mode: "destroy" removes them, "reflect" turns them friendly, "absorb" removes.
+## Returns the number intercepted. cooldown handled by caller.
+func intercept(center: Vector2, radius: float, mode: String = "destroy") -> int:
+    if world == null:
+        return 0
+    var n := 0
+    var r2 := radius * radius
+    var i := live.size() - 1
+    while i >= 0:
+        var p: Pr = live[i]
+        if p.kind == Kind.HOSTILE and p.pos.distance_squared_to(center) <= r2 + p.radius * p.radius:
+            if mode == "reflect":
+                p.kind = Kind.BULLET
+                p.color = Color(1.0, 0.85, 0.4)
+                p.hit.clear()
+                n += 1
+                i -= 1
+            else:
+                live.remove_at(i)
+                _free.append(p)
+                n += 1
+                i -= 1
+        else:
+            i -= 1
+    return n
+
+
 func _process(delta: float) -> void:
     if world == null or not world.sim_running:
         return

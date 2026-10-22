@@ -24,6 +24,7 @@ var flags: Dictionary = {}
 var t := 0.0                  # generic countdown for subclasses
 var mod_ops: Array = []        # owned Black Market mods: stat ops (same format as branches)
 var mod_flags: Dictionary = {} # owned Black Market mods: behavior switches/params read via has_mod() / mod_f()
+var evo_ids: Array = []         # chosen evolution ids (from authored evo1/evo2)
 
 
 static func make(res, pl: Player) -> Ability:
@@ -73,37 +74,39 @@ func recompute() -> void:
                 _apply_evo_opt(evo_option(1, evo1))
             if evo2 >= 0:
                 _apply_evo_opt(evo_option(2, evo2))
+    evo_ids.clear()
+    if branch >= 0 and evolvable():
+        var br: Dictionary = def.branches[branch]
+        if evo1 >= 0:
+            var t1 = br.get("evo1", [])
+            if t1 is Array and evo1 < (t1 as Array).size():
+                var o1: Dictionary = (t1 as Array)[evo1]
+                if o1 is Dictionary and o1.has("id"):
+                    evo_ids.append(String(o1.get("id")))
+        if evo2 >= 0:
+            var t2 = br.get("evo2", [])
+            if t2 is Array and evo2 < (t2 as Array).size():
+                var o2: Dictionary = (t2 as Array)[evo2]
+                if o2 is Dictionary and o2.has("id"):
+                    evo_ids.append(String(o2.get("id")))
     for ops in mod_ops:
         _apply(ops as Dictionary)
+    _clamp_p()
 
 
 ## One evolution option for this ability's picked branch. Hand-authored data
-## (branch "evo1"/"evo2" tables) wins; otherwise a generated fallback derived
-## from the branch's own ops, so the pair is never empty and always
-## branch-flavored. Shape: {name, desc, ops, ops2?, ops3?, flags}.
+## (branch "evo1"/"evo2" tables) only. Cowboy slice supports up to 4 per tier (8 total).
 func evo_option(tier: int, idx: int) -> Dictionary:
-    if branch >= 0 and (tier == 1 or tier == 2) and (idx == 0 or idx == 1):
+    if branch >= 0 and (tier == 1 or tier == 2) and idx >= 0:
         var br: Dictionary = def.branches[branch]
         var table = br.get("evo1" if tier == 1 else "evo2", [])
         if table is Array and idx < (table as Array).size() and (table as Array)[idx] is Dictionary:
             var opt: Dictionary = ((table as Array)[idx] as Dictionary).duplicate(true)
-            opt["fallback"] = false
             return opt
-    return _fallback_evo(tier, idx)
+    return {}
 
 
-func _fallback_evo(tier: int, idx: int) -> Dictionary:
-    var br: Dictionary = def.branches[branch] if branch >= 0 else {}
-    var per: Dictionary = (br.get("per_level", {}) as Dictionary).duplicate(true)
-    var pick: Dictionary = (br.get("on_pick", {}) as Dictionary).duplicate(true)
-    var bname := branch_name()
-    if tier == 2:
-        if idx == 0:
-            return {"name": bname + " Ascension", "desc": "Final evolution of " + bname + ": its gift and its growth, both unleashed.", "ops": pick, "ops2": per, "ops3": per, "flags": {}, "fallback": true}
-        return {"name": bname + " Transcendence", "desc": "Final evolution of " + bname + ": growth beyond growth, threefold.", "ops": per, "ops2": per, "ops3": per, "flags": {}, "fallback": true}
-    if idx == 0:
-        return {"name": bname + " Surge", "desc": "Evolve " + bname + ": its per-level growth strikes twice as hard.", "ops": per, "ops2": per, "flags": {}, "fallback": true}
-    return {"name": bname + " Focus", "desc": "Evolve " + bname + ": feel its gift a second time.", "ops": pick, "flags": {}, "fallback": true}
+
 
 
 func _apply_evo_opt(opt: Dictionary) -> void:
@@ -131,9 +134,7 @@ func _apply_milestones(b: Dictionary) -> void:
             if e is Dictionary and int((e as Dictionary).get("level", -1)) == int(m):
                 entry = e
                 break
-        if entry.is_empty():
-            _apply(b["per_level"])
-        else:
+        if not entry.is_empty():
             _apply((entry as Dictionary).get("ops", {}))
             flags.merge((entry as Dictionary).get("flags", {}), true)
 
@@ -230,10 +231,24 @@ func needs_branch() -> bool:
 func needs_evo(tier: int) -> bool:
     if not evolvable():
         return false
+    if branch < 0:
+        return false
     if tier == 1:
-        return branch >= 0 and evo1 < 0 and level >= EVO1_LEVEL
+        if not (evo1 < 0 and level >= EVO1_LEVEL):
+            return false
+        var br: Dictionary = def.branches[branch]
+        var t1 = br.get("evo1", [])
+        if not (t1 is Array and t1.size() >= 2):
+            return false
+        return true
     if tier == 2:
-        return evo1 >= 0 and evo2 < 0 and level >= EVO2_LEVEL
+        if not (evo1 >= 0 and evo2 < 0 and level >= EVO2_LEVEL):
+            return false
+        var br: Dictionary = def.branches[branch]
+        var t2 = br.get("evo2", [])
+        if not (t2 is Array and t2.size() >= 2):
+            return false
+        return true
     return false
 
 
@@ -276,6 +291,43 @@ func update(_delta: float) -> void:
 
 
 func on_kill(_e) -> void:
+    pass
+
+
+func has_evo(id: String) -> bool:
+    for ev in evo_ids:
+        if String(ev) == id:
+            return true
+    return false
+
+
+func _clamp_p() -> void:
+    var caps: Dictionary = def.get("caps")
+    if caps == null or not (caps is Dictionary):
+        return
+    for k in caps.keys():
+        var rng = caps.get(k)
+        if rng is Array and rng.size() >= 2:
+            var v: float = float(p.get(k, 0.0))
+            var mn: float = float(rng[0])
+            var mx: float = float(rng[1])
+            if mx < mn:
+                var tmp = mn; mn = mx; mx = tmp
+            if v < mn:
+                p[k] = mn
+            if v > mx:
+                p[k] = mx
+
+
+func on_attack(_info) -> void:
+    pass
+
+
+func on_hit(_e, _amount) -> void:
+    pass
+
+
+func on_player_hurt(_amount) -> void:
     pass
 
 

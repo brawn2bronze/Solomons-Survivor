@@ -292,9 +292,9 @@ func _apply_dev_config() -> void:
 
 
 ## Max out weapon + passive (with chosen branches) and all stat upgrades. Used for ability debugging.
-func dev_max_build(wb: int = 0, pb: int = 0) -> void:
-	_dev_max_ability(player.weapon, wb)
-	_dev_max_ability(player.passive, pb)
+func dev_max_build(wb: int = 0, pb: int = 0, we1: int = 0, we2: int = 0, pe1: int = 0, pe2: int = 0) -> void:
+	_dev_max_ability(player.weapon, wb, we1, we2)
+	_dev_max_ability(player.passive, pb, pe1, pe2)
 	for up_id in DB.upgrades.keys():
 		var up: UpgradeDef = DB.upgrades[up_id]
 		while int(player.upgrade_levels.get(up_id, 0)) < up.max_level:
@@ -303,16 +303,29 @@ func dev_max_build(wb: int = 0, pb: int = 0) -> void:
 
 
 ## Dev sandbox helper: climb to 16, taking the branch at 4 and both
-## evolutions (option 0) on the way up.
-func _dev_max_ability(ab: Ability, branch_idx: int) -> void:
+## evolutions (chosen options) on the way up.
+func _dev_max_ability(ab: Ability, branch_idx: int, e1: int = 0, e2: int = 0) -> void:
 	while ab.can_level():
 		ab.level_up()
 		if ab.needs_branch():
 			ab.pick_branch(clampi(branch_idx, 0, 1))
 		if ab.needs_evo(1):
-			ab.apply_evo(1, 0)
+			ab.apply_evo(1, clampi(e1, 0, 7))
 		if ab.needs_evo(2):
-			ab.apply_evo(2, 0)
+			ab.apply_evo(2, clampi(e2, 0, 7))
+
+
+func dev_set_kit(kind: String, level: int, branch: int, e1: int, e2: int) -> void:
+	var ab: Ability = player.weapon if kind == "weapon" else player.passive
+	while ab.level < level and ab.can_level():
+		ab.level_up()
+		if ab.needs_branch():
+			ab.pick_branch(clampi(branch, 0, 1))
+		if ab.needs_evo(1) and ab.evo1 < 0:
+			ab.apply_evo(1, clampi(e1, 0, 7))
+		if ab.needs_evo(2) and ab.evo2 < 0:
+			ab.apply_evo(2, clampi(e2, 0, 7))
+	refresh()
 
 
 func dev_set_godmode(on: bool) -> void:
@@ -494,6 +507,24 @@ func on_kill(e) -> void:
 	# the act (Phase-2 shim auto-advances; dev-spawned bosses never trigger it).
 	if acts != null and acts.held_boss_id == String(e.def.id):
 		acts.boss_slain(e.def)
+
+
+func on_ability_hit(e, amount: float) -> void:
+	if player.weapon != null:
+		player.weapon.on_hit(e, amount)
+	if player.passive != null:
+		player.passive.on_hit(e, amount)
+	for cw in player.chest_weapons:
+		cw.on_hit(e, amount)
+
+
+func on_player_hurt(amount: float) -> void:
+	if player.weapon != null:
+		player.weapon.on_player_hurt(amount)
+	if player.passive != null:
+		player.passive.on_player_hurt(amount)
+	for cw in player.chest_weapons:
+		cw.on_player_hurt(amount)
 
 
 ## A unique boss died: grant its meta unlock (the Forbidden Archive) and announce it. The fragment jackpot comes from CoinManager.

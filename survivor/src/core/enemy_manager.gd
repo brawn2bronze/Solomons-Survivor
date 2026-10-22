@@ -51,6 +51,9 @@ class E:
 	var fear := 0.0
 	var fear_from := Vector2.ZERO
 	var slow := 1.0
+	var cc_immune_t := 0.0
+	var marks := {}
+	var hit_gate := {}
 	var atk_slow := 1.0
 	var slow_t := 0.0
 	var poison_dps := 0.0
@@ -288,6 +291,9 @@ func spawn(def, pos: Vector2, hp_mult: float = 1.0, dmg_mult: float = 1.0):
 	e.slow = 1.0
 	e.atk_slow = 1.0
 	e.slow_t = 0.0
+	e.cc_immune_t = 0.0
+	e.marks.clear()
+	e.hit_gate.clear()
 	e.poison_t = 0.0
 	e.poison_dps = 0.0
 	e.burn_t = 0.0
@@ -478,6 +484,11 @@ func _update_enemy(e: E, delta: float, pp: Vector2) -> void:
 		e.hp = e.max_hp
 	e.flash = maxf(0.0, e.flash - delta)
 	e.contact_cd -= delta * e.atk_slow
+	e.cc_immune_t = maxf(0.0, e.cc_immune_t - delta)
+	for k in e.hit_gate.keys():
+		e.hit_gate[k] = float(e.hit_gate[k]) - delta
+		if e.hit_gate[k] <= 0.0:
+			e.hit_gate.erase(k)
 	if e.slow_t > 0.0:
 		e.slow_t -= delta
 		if e.slow_t <= 0.0:
@@ -505,8 +516,14 @@ func _update_enemy(e: E, delta: float, pp: Vector2) -> void:
 	var move := Vector2.ZERO
 	if e.stun > 0.0:
 		e.stun -= delta
+		if e.stun <= 0.0:
+			e.stun = 0.0
+			e.cc_immune_t = 1.5
 	elif e.fear > 0.0:
 		e.fear -= delta
+		if e.fear <= 0.0:
+			e.fear = 0.0
+			e.cc_immune_t = 1.5
 		move = (e.pos - e.fear_from).normalized() * e.speed * 1.35
 	else:
 		match d.behavior:
@@ -538,7 +555,7 @@ func _update_enemy(e: E, delta: float, pp: Vector2) -> void:
 	e.pos += (e.vel + e.knock) * delta
 	e.knock *= exp(-8.0 * delta)
 	# contact damage (blink vanish cannot touch while vanished; glitch fodder always touches)
-	if e.contact_cd <= 0.0 and e.stun <= 0.0 and e.fear <= 0.0 and dist < e.radius + PLAYER_RADIUS and not (String(d.behavior) == "blink" and e.state == 1):
+	if e.contact_cd <= 0.0 and e.stun <= 0.0 and e.fear <= 0.0 and dist < e.radius + PLAYER_RADIUS and not (String(d.behavior) == "blink" and e.state == 1) and not player.untargetable:
 		e.contact_cd = 0.75
 		player.take_damage(e.dmg, d.height == 1 or d.can_hit_flying, d.display_name)
 	# visuals
@@ -1115,11 +1132,11 @@ func query_arc(center: Vector2, dir: Vector2, r: float, arc_rad: float) -> Array
 	return out
 
 
-func nearest(center: Vector2, max_r: float, exclude: Array = []) -> E:
+func nearest(center: Vector2, max_r: float, exclude: Dictionary = {}) -> E:
 	var best: E = null
 	var best_d := max_r * max_r
 	for e in active:
-		if exclude.has(e):
+		if exclude.has(e.uid):
 			continue
 		var d := e.pos.distance_squared_to(center)
 		if d < best_d:
@@ -1143,13 +1160,17 @@ func _maybe_execute(e: E) -> void:
 		e.hp = 0.0
 
 
-func damage(e: E, amount: float, knock_dir: Vector2 = Vector2.ZERO, knock_force: float = 0.0, tint: Color = Color(1.0, 0.9, 0.6)) -> void:
+func damage(e: E, amount: float, knock_dir: Vector2 = Vector2.ZERO, knock_force: float = 0.0, tint: Color = Color(1.0, 0.9, 0.6), src: String = "") -> void:
 	if not e.alive:
 		return
 	if String(e.def.behavior) == "blink" and e.state == 1:
 		return
 	if String(e.def.behavior) == "glitch" and e.state == 1:
 		return
+	if src != "":
+		if e.hit_gate.get(src, 0.0) > 0.0:
+			return
+		e.hit_gate[src] = 0.10
 	var is_dummy := String(e.def.behavior) == "dummy"
 	var crit: bool = randf() < 0.07 + float(player.stat("luck")) * 0.25 + float(player.stat("crit_chance"))
 	if crit:
@@ -1165,12 +1186,17 @@ func damage(e: E, amount: float, knock_dir: Vector2 = Vector2.ZERO, knock_force:
 	if crit:
 		world.fx.crit_feel(e.pos, e.is_elite)
 	Audio.sfx(e.def.hit_event, -9.0)
+	if world != null and not is_dummy:
+		world.on_ability_hit(e, amount)
 	if e.hp <= 0.0 and not is_dummy:
 		_kill(e)
 
 
 func stun(e: E, seconds: float) -> void:
-	e.stun = maxf(e.stun, seconds * (0.5 if e.is_elite else 1.0))
+	if e.cc_immune_t > 0.0 or float(e.def.boss_time) > 0.0:
+		return
+	var d: float = seconds * (0.5 if e.is_elite else 1.0)
+	e.stun = maxf(e.stun, minf(d, 1.8))
 
 
 func fear(e: E, seconds: float, from_pos: Vector2) -> void:
@@ -1193,9 +1219,33 @@ func infect(e: E, seconds: float) -> void:
 
 
 func slow(e: E, mult: float, seconds: float) -> void:
+	if float(e.def.boss_time) > 0.0:
+		mult = maxf(mult, 0.70)
 	e.slow = minf(e.slow, mult)
 	e.atk_slow = minf(e.atk_slow, mult)
 	e.slow_t = maxf(e.slow_t, seconds)
+
+
+func mark(e: E, key: String) -> void:
+	e.marks[key] = true
+
+
+func has_mark(e: E, key: String) -> bool:
+	return e.marks.has(key)
+
+
+func clear_mark(e: E, key: String) -> void:
+	e.marks.erase(key)
+
+
+func pull(e: E, center: Vector2, radius: float, strength: float, _duration: float = 0.0) -> void:
+	if float(e.def.boss_time) > 0.0:
+		return
+	var d := e.pos.distance_to(center)
+	if d < 1.0 or d > radius:
+		return
+	var dir := (center - e.pos).normalized()
+	e.knock += dir * strength
 
 
 func _kill(e: E, quiet: bool = false, silent: bool = false) -> void:

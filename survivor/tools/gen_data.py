@@ -91,9 +91,10 @@ CHARS = [
 LOCKED_HINT = "Locked - unlocks in the full release."
 
 # ------------------------------------------------------------------------------------------------ abilities
-def ability(kind, id, name, desc, behavior, audio, base, branches, level_scaling, color, level_text="", art=None, rarity=0, unlock_hint=""):
+def ability(kind, id, name, desc, behavior, audio, base, branches, level_scaling, color, level_text="", art=None, rarity=0, unlock_hint="", caps=None):
     return dict(kind=kind, id=id, name=name, desc=desc, behavior=behavior, audio=audio, base=base, branches=branches,
-                scaling=level_scaling, color=color, level_text=level_text, art=art or {}, rarity=rarity, unlock_hint=unlock_hint)
+                scaling=level_scaling, color=color, level_text=level_text, art=art or {}, rarity=rarity, unlock_hint=unlock_hint,
+                caps=caps or {})
 
 
 # Card/HUD art keyed by ability id. Weapons are 64px cells, passives 32/64px singletons for now.
@@ -139,66 +140,103 @@ def B(id, name, desc, on_pick=None, per_level=None, flags=None, evo1=None, evo2=
                 evo1=evo1 or [], evo2=evo2 or [])
 
 
-def EVO(name, desc, ops=None, ops2=None, ops3=None, flags=None):
-    return dict(name=name, desc=desc, ops=ops or {}, ops2=ops2 or {}, ops3=ops3 or {}, flags=flags or {})
+def EVO(id, name, desc, ops=None, ops2=None, ops3=None, flags=None, icon=None, icon_frames=1, icon_fps=8.0):
+    d = dict(id=id, name=name, desc=desc, ops=ops or {}, ops2=ops2 or {}, ops3=ops3 or {}, flags=flags or {})
+    if icon:
+        d["icon"] = icon
+        d["icon_frames"] = icon_frames
+        d["icon_fps"] = icon_fps
+    return d
 
 
 ABILITIES = [
     # ---- Cowboy
     ability("weapon", "six_shooter", "6-Shooter", "Fires 6 consecutive shots, then reloads.", "revolver", "revolver_shot",
             dict(damage=12.0, shots=6, shot_interval=0.11, reload_time=1.7, pierce=0, range=520.0, speed=640.0, spread_deg=3.0, radius=4.0, count=1),
-            [B("a", "Speed Loader", "Decrease reload time.", on_pick={"reload_time": ["mul", 0.8]}, per_level={"reload_time": ["mul", 0.9]}),
-             B("b", "Armor-Piercing Rounds", "Increase piercing.", on_pick={"pierce": ["add", 1]}, per_level={"pierce": ["add", 1]})],
-            {"damage": ["mul", 1.10]}, col(255, 214, 120)),
+            [B("a", "Speed Loader", "Decrease reload time.", on_pick={"reload_time": ["mul", 0.8]}, per_level={"reload_time": ["mul", 0.95]},
+                evo1=[EVO("fan_fire", "Fan Fire", "Fire 2 extra shots per burst.", ops={"shots": ["add", 2]}),
+                       EVO("deadeye", "Deadeye", "Bigger bullets, heavier hits.", ops={"damage": ["mul", 1.5], "radius": ["mul", 1.3]}),
+                       EVO("quickdraw", "Quickdraw", "Reload almost instantly.", ops={"reload_time": ["mul", 0.5]}),
+                       EVO("ricochet", "Ricochet", "Bullets pierce one extra target.", ops={"pierce": ["add", 1]})],
+                evo2=[EVO("bullet_storm", "Bullet Storm", "Fire much faster.", ops={"shot_interval": ["mul", 0.6]}),
+                       EVO("executioner", "Executioner", "Massive damage, slow reload.", ops={"damage": ["mul", 2.2], "reload_time": ["mul", 1.3]}),
+                       EVO("armor_piercer", "Armor Piercer", "Shoot through everything.", ops={"pierce": ["add", 3]}),
+                       EVO("six_shooter_ultimate", "Six-Shooter Ultimate", "Everything up. Damage, shots, speed.", ops={"damage": ["mul", 1.4], "shots": ["add", 2], "shot_interval": ["mul", 0.85]})]),
+             B("b", "Armor-Piercing Rounds", "Increase piercing.", on_pick={"pierce": ["add", 1]}, per_level={"pierce": ["add", 1]},
+                evo1=[EVO("fan_fire", "Fan Fire", "Fire 2 extra shots per burst.", ops={"shots": ["add", 2]}),
+                       EVO("deadeye", "Deadeye", "Bigger bullets, heavier hits.", ops={"damage": ["mul", 1.5], "radius": ["mul", 1.3]}),
+                       EVO("quickdraw", "Quickdraw", "Reload almost instantly.", ops={"reload_time": ["mul", 0.5]}),
+                       EVO("ricochet", "Ricochet", "Bullets pierce one extra target.", ops={"pierce": ["add", 1]})],
+                evo2=[EVO("bullet_storm", "Bullet Storm", "Fire much faster.", ops={"shot_interval": ["mul", 0.6]}),
+                       EVO("executioner", "Executioner", "Massive damage, slow reload.", ops={"damage": ["mul", 2.2], "reload_time": ["mul", 1.3]}),
+                       EVO("armor_piercer", "Armor Piercer", "Shoot through everything.", ops={"pierce": ["add", 3]}),
+                       EVO("six_shooter_ultimate", "Six-Shooter Ultimate", "Everything up. Damage, shots, speed.", ops={"damage": ["mul", 1.4], "shots": ["add", 2], "shot_interval": ["mul", 0.85]})])],
+            {"damage": ["mul", 1.07]}, col(255, 214, 120), caps={"cooldown": [0.60, 99.0], "damage": [0.1, 500.0], "shots": [1, 20], "reload_time": [0.3, 10.0], "pierce": [0, 10]}),
     ability("passive", "flailing_whip", "Flailing Whip", "Automatically strikes nearby enemies in melee range.", "whip", "whip_crack",
             dict(damage=9.0, interval=1.0, range=88.0, arc_deg=110.0, tick=0.25),
-            [B("a", "Barbed Chain", "Constant low damage to everything within range.", on_pick={"tick": ["set", 0.22], "damage": ["mul", 0.35]}, per_level={"damage": ["mul", 1.14]}, flags={"mode": "aura"}),
-             B("b", "Cracking Lash", "Semi-frequent high-damage pulses.", on_pick={"interval": ["set", 2.4], "damage": ["mul", 3.2], "range": ["mul", 1.2]}, per_level={"damage": ["mul", 1.16]}, flags={"mode": "pulse"})],
-            {"damage": ["mul", 1.12]}, col(200, 140, 80)),
+            [B("a", "Barbed Chain", "Constant low damage to everything within range.", on_pick={"tick": ["set", 0.22], "damage": ["mul", 0.35]}, per_level={"damage": ["mul", 1.07]}, flags={"mode": "aura"},
+                evo1=[EVO("barbed_lash", "Barbed Lash", "Whip poisons on hit.", flags={"poison": True}),
+                       EVO("ensnare", "Ensnare", "Whip slows enemies.", flags={"slow": True}),
+                       EVO("chain_reach", "Chain Reach", "Much longer whip range.", ops={"range": ["mul", 1.5]}),
+                       EVO("frenzy", "Frenzy", "Whip strikes much faster.", ops={"tick": ["mul", 0.6]})],
+                evo2=[EVO("whip_storm", "Whip Storm", "Each strike explodes in an area.", flags={"explode": True}),
+                       EVO("constrict", "Constrict", "Heavy slow and heavy damage.", flags={"slow": True, "damage_up": True}, ops={"damage": ["mul", 1.5]}),
+                       EVO("soul_leech", "Soul Leech", "Heal on every whip hit.", flags={"lifesteal": True}),
+                       EVO("thundercrack", "Thundercrack", "Chance to stun on hit.", flags={"stun_chance": True})]),
+             B("b", "Cracking Lash", "Semi-frequent high-damage pulses.", on_pick={"interval": ["set", 2.4], "damage": ["mul", 3.2], "range": ["mul", 1.2]}, per_level={"damage": ["mul", 1.08]}, flags={"mode": "pulse"},
+                evo1=[EVO("barbed_lash", "Barbed Lash", "Whip poisons on hit.", flags={"poison": True}),
+                       EVO("ensnare", "Ensnare", "Whip slows enemies.", flags={"slow": True}),
+                       EVO("chain_reach", "Chain Reach", "Much longer whip range.", ops={"range": ["mul", 1.5]}),
+                       EVO("frenzy", "Frenzy", "Whip strikes much faster.", ops={"tick": ["mul", 0.6]})],
+                evo2=[EVO("whip_storm", "Whip Storm", "Each strike explodes in an area.", flags={"explode": True}),
+                       EVO("constrict", "Constrict", "Heavy slow and heavy damage.", flags={"slow": True, "damage_up": True}, ops={"damage": ["mul", 1.5]}),
+                       EVO("soul_leech", "Soul Leech", "Heal on every whip hit.", flags={"lifesteal": True}),
+                       EVO("thundercrack", "Thundercrack", "Chance to stun on hit.", flags={"stun_chance": True})])],
+            {"damage": ["mul", 1.07]}, col(200, 140, 80), caps={"damage": [0.1, 500.0], "interval": [0.3, 10.0], "range": [20.0, 400.0], "tick": [0.1, 5.0]}),
     # ---- Ninja
     ability("weapon", "katana", "Katana", "Close-range area swipe attacks.", "melee_swipe", "katana_slash",
             dict(damage=16.0, cooldown=0.7, radius=72.0, arc_deg=150.0, knockback=60.0, alternate=False),
-            [B("a", "Wide Arc", "Increase radius.", on_pick={"radius": ["mul", 1.3]}, per_level={"radius": ["mul", 1.1]}),
-             B("b", "Blitz Strikes", "Increase strike speed.", on_pick={"cooldown": ["mul", 0.8]}, per_level={"cooldown": ["mul", 0.9]})],
-            {"damage": ["mul", 1.10]}, col(220, 230, 255)),
+            [B("a", "Wide Arc", "Increase radius.", on_pick={"radius": ["mul", 1.3]}, per_level={"radius": ["mul", 1.05]}),
+             B("b", "Blitz Strikes", "Increase strike speed.", on_pick={"cooldown": ["mul", 0.8]}, per_level={"cooldown": ["mul", 0.95]})],
+            {"damage": ["mul", 1.07]}, col(220, 230, 255), caps={"cooldown": [0.60, 99.0], "damage": [0.1, 500.0], "radius": [20.0, 400.0]}),
     ability("passive", "flash_bombs", "Flash Bombs", "Stuns nearby enemies at intervals.", "stun_pulse", "goblin_hit",
             dict(interval=6.0, radius=95.0, stun=1.2),
-            [B("a", "Wide Flash", "Larger stun radius.", on_pick={"radius": ["mul", 1.3]}, per_level={"radius": ["mul", 1.12]}),
-             B("b", "Lingering Flash", "Longer stun duration.", on_pick={"stun": ["mul", 1.4]}, per_level={"stun": ["mul", 1.12]})],
-            {"interval": ["mul", 0.95]}, col(255, 255, 200)),
+            [B("a", "Wide Flash", "Larger stun radius.", on_pick={"radius": ["mul", 1.3]}, per_level={"radius": ["mul", 1.06]}),
+             B("b", "Lingering Flash", "Longer stun duration.", on_pick={"stun": ["mul", 1.4]}, per_level={"stun": ["mul", 1.06]})],
+            {"interval": ["mul", 0.95]}, col(255, 255, 200), caps={"interval": [1.0, 30.0], "radius": [30.0, 400.0], "stun": [0.1, 5.0]}),
     # ---- Pirate
     ability("weapon", "hand_cannon", "Hand-Cannon", "Fires one large piercing bullet with a long reload.", "cannon", "hand_cannon",
             dict(damage=46.0, reload_time=3.0, pierce=99, radius=9.0, speed=470.0, range=560.0, shrapnel=0, shrapnel_damage=0.35, count=1),
             [B("a", "Shrapnel", "Extra projectiles on hit.", on_pick={"shrapnel": ["add", 3]}, per_level={"shrapnel": ["add", 1]}),
-             B("b", "Heavy Shot", "Projectile size increase.", on_pick={"radius": ["mul", 1.35], "damage": ["mul", 1.1]}, per_level={"radius": ["mul", 1.12]})],
-            {"damage": ["mul", 1.11]}, col(255, 120, 60)),
+             B("b", "Heavy Shot", "Projectile size increase.", on_pick={"radius": ["mul", 1.35], "damage": ["mul", 1.1]}, per_level={"radius": ["mul", 1.06]})],
+            {"damage": ["mul", 1.07]}, col(255, 120, 60), caps={"cooldown": [0.60, 99.0], "damage": [0.1, 1000.0], "reload_time": [0.5, 15.0]}),
     ability("passive", "pirate_crew", "Pirate Crew", "Summons ally pirates. While the crew fights beside you, your projectiles are multiplied by the number of allies.", "summon_allies", "hand_cannon",
             dict(interval=14.0, allies=2, duration=6.0),
             [B("a", "Press Gang", "More allies spawned.", on_pick={"allies": ["add", 1]}, per_level={"allies": ["add", 1]}),
-             B("b", "Sea Legs", "Allies last longer.", on_pick={"duration": ["mul", 1.35]}, per_level={"duration": ["mul", 1.15]})],
-            {"interval": ["mul", 0.96]}, col(220, 80, 80)),
+             B("b", "Sea Legs", "Allies last longer.", on_pick={"duration": ["mul", 1.35]}, per_level={"duration": ["mul", 1.075]})],
+            {"interval": ["mul", 0.96]}, col(220, 80, 80), caps={"interval": [3.0, 60.0], "allies": [1, 8], "duration": [2.0, 30.0]}),
     # ---- Paladin
     ability("weapon", "greatsword", "Greatsword", "Slower than the katana but hits much harder.", "melee_swipe", "greatsword_swing",
             dict(damage=34.0, cooldown=1.5, radius=98.0, arc_deg=160.0, knockback=140.0, alternate=False, wave=False, wave_damage=0.55),
-            [B("a", "Holy Wave", "Sword emits a projectile wave on top of the melee attack.", on_pick={}, per_level={"wave_damage": ["mul", 1.12]}, flags={"wave": True}),
-             B("b", "Focused Zeal", "Concentrate energy: higher damage and faster swings.", on_pick={"damage": ["mul", 1.25], "cooldown": ["mul", 0.85]}, per_level={"damage": ["mul", 1.1], "cooldown": ["mul", 0.95]})],
-            {"damage": ["mul", 1.10]}, col(255, 235, 160)),
+            [B("a", "Holy Wave", "Sword emits a projectile wave on top of the melee attack.", on_pick={}, per_level={"wave_damage": ["mul", 1.06]}, flags={"wave": True}),
+             B("b", "Focused Zeal", "Concentrate energy: higher damage and faster swings.", on_pick={"damage": ["mul", 1.25], "cooldown": ["mul", 0.85]}, per_level={"damage": ["mul", 1.05], "cooldown": ["mul", 0.975]})],
+            {"damage": ["mul", 1.07]}, col(255, 235, 160), caps={"cooldown": [0.60, 99.0], "damage": [0.1, 500.0], "radius": [20.0, 400.0]}),
     ability("passive", "prayer", "Prayer", "Flashes an illuminated aura at regular intervals.", "whip", "whip_crack",
             dict(damage=7.0, interval=4.5, range=115.0, tick=0.3),
-            [B("a", "Sanctified Ground", "Constant low damage within range.", on_pick={"tick": ["set", 0.25], "damage": ["mul", 0.4]}, per_level={"damage": ["mul", 1.14]}, flags={"mode": "aura"}),
-             B("b", "Judgement Pulse", "Semi-frequent high-damage pulses.", on_pick={"interval": ["set", 2.6], "damage": ["mul", 3.4], "range": ["mul", 1.2]}, per_level={"damage": ["mul", 1.16]}, flags={"mode": "pulse"})],
-            {"damage": ["mul", 1.12]}, col(255, 240, 180)),
+            [B("a", "Sanctified Ground", "Constant low damage within range.", on_pick={"tick": ["set", 0.25], "damage": ["mul", 0.4]}, per_level={"damage": ["mul", 1.07]}, flags={"mode": "aura"}),
+             B("b", "Judgement Pulse", "Semi-frequent high-damage pulses.", on_pick={"interval": ["set", 2.6], "damage": ["mul", 3.4], "range": ["mul", 1.2]}, per_level={"damage": ["mul", 1.08]}, flags={"mode": "pulse"})],
+            {"damage": ["mul", 1.07]}, col(255, 240, 180), caps={"damage": [0.1, 500.0], "interval": [1.0, 30.0], "range": [20.0, 400.0], "tick": [0.1, 5.0]}),
     # ---- Wizard
     ability("weapon", "merlins_book", "Merlin's Book", "Zaps foes with a lightning bolt that chains to other enemies.", "chain_lightning", "lightning_bolt",
             dict(damage=14.0, cooldown=1.1, chains=2, chain_range=130.0, range=420.0, orb=False, orb_chains=3, orb_damage=0.5, orb_time=3.0),
-            [B("a", "Storm Surge", "Stronger voltage and more chains.", on_pick={"damage": ["mul", 1.25], "chains": ["add", 2]}, per_level={"damage": ["mul", 1.1], "chains": ["add", 1]}),
-             B("b", "Ball Lightning", "Leaves an orb that chains a fixed number of foes (lower damage, stays put).", on_pick={}, per_level={"orb_damage": ["mul", 1.12]}, flags={"orb": True})],
-            {"damage": ["mul", 1.10]}, col(120, 200, 255)),
+            [B("a", "Storm Surge", "Stronger voltage and more chains.", on_pick={"damage": ["mul", 1.25], "chains": ["add", 2]}, per_level={"damage": ["mul", 1.05], "chains": ["add", 0.5]}),
+             B("b", "Ball Lightning", "Leaves an orb that chains a fixed number of foes (lower damage, stays put).", on_pick={}, per_level={"orb_damage": ["mul", 1.06]}, flags={"orb": True})],
+            {"damage": ["mul", 1.07]}, col(120, 200, 255), caps={"cooldown": [0.60, 99.0], "damage": [0.1, 500.0], "chains": [0, 12], "chain_range": [30.0, 400.0]}),
     ability("passive", "astral_projection", "Astral Projection", "Spawns a translucent astral copy that temporarily doubles projectiles.", "astral_clone", "lightning_bolt",
             dict(interval=12.0, duration=5.0, projectile_mult=2.0),
-            [B("a", "Deep Trance", "Longer wait between projections, more projectiles while active.", on_pick={"interval": ["mul", 1.5], "projectile_mult": ["set", 3.0]}, per_level={"projectile_mult": ["add", 0.25]}),
+            [B("a", "Deep Trance", "Longer wait between projections, more projectiles while active.", on_pick={"interval": ["mul", 1.5], "projectile_mult": ["set", 3.0]}, per_level={"projectile_mult": ["add", 0.125]}),
              B("b", "Quick Mind", "Shorter intervals, fixed 1.5x projectile multiplier.", on_pick={"interval": ["mul", 0.55], "projectile_mult": ["set", 1.5]}, per_level={"interval": ["mul", 0.95]})],
-            {"duration": ["mul", 1.05]}, col(180, 200, 255)),
+            {"duration": ["mul", 1.05]}, col(180, 200, 255), caps={"interval": [3.0, 60.0], "duration": [2.0, 30.0], "projectile_mult": [1.0, 3.0]}),
     # ---- Spider
     ability("weapon", "fangs", "Fangs", "Close-range, fast, high damage. Applies paralysis.", "melee_bite", "fang_bite",
             dict(damage=20.0, cooldown=0.42, range=58.0, paralysis_chance=0.2, paralysis_time=0.9),
@@ -363,7 +401,7 @@ def main():
             id=a["id"], display_name=a["name"], description=a["desc"], behavior=a["behavior"], audio_event=a["audio"], base=a["base"],
             branches=a["branches"], level_scaling=a["scaling"], max_level=8, branch_milestones=a.get("milestones", []), color=a["color"],
             icon=art["icon"], icon_frames=art["icon_frames"], icon_fps=art["icon_fps"], preview_kind=art["preview_kind"], anims=art["anims"],
-            rarity=a.get("rarity", 0), unlock_hint=a.get("unlock_hint", "")))
+            rarity=a.get("rarity", 0), unlock_hint=a.get("unlock_hint", ""), caps=a.get("caps", {})))
     for a in PICKUPS:
         art = ART.get(a["id"], dict(icon="", icon_frames=1, icon_fps=8.0, preview_kind="none", anims={}))
         emit("weapons", "WeaponDef", "weapon_def.gd", a["id"], dict(

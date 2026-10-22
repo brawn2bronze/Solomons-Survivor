@@ -51,7 +51,7 @@ class Whip extends Ability:
             t = float(p["interval"]) * cd()
             _radial(origin, r, col, mode == "pulse")
             return
-        var tgt: EnemyManager.E = world().enemies.nearest(player.global_position, r * 1.25)
+        var tgt: EnemyManager.E = world().enemies.nearest(player.global_position, r * 1.25, {})
         if tgt == null and mode != "pulse":
             t = 0.05
             return
@@ -254,7 +254,7 @@ class Web extends Ability:
         t -= delta
         if t > 0.0:
             return
-        var tgt: EnemyManager.E = world().enemies.nearest(player.global_position, 300.0)
+        var tgt: EnemyManager.E = world().enemies.nearest(player.global_position, 300.0, {})
         if tgt == null:
             t = 0.2
             return
@@ -342,7 +342,7 @@ class Swoop extends Ability:
         if t > 0.0 or player.dash_t > 0.0:
             return
         var evasive: bool = flags.get("evasive", false)
-        var tgt: EnemyManager.E = world().enemies.nearest(player.global_position, float(p["swoop_range"]))
+        var tgt: EnemyManager.E = world().enemies.nearest(player.global_position, float(p["swoop_range"]), {})
         if tgt == null:
             t = 0.15
             return
@@ -400,7 +400,7 @@ class RaiseDead extends Ability:
             m["cd"] = float(m["cd"]) - delta
             m["anim"] = float(m["anim"]) + delta * 8.0
             var pos: Vector2 = m["pos"]
-            var tgt: EnemyManager.E = world().enemies.nearest(pos, 280.0)
+            var tgt: EnemyManager.E = world().enemies.nearest(pos, 280.0, {})
             var dest := player.global_position + Vector2(cos(float(m["anim"]) * 0.2) * 50.0, sin(float(m["anim"]) * 0.2) * 30.0)
             if tgt != null:
                 dest = tgt.pos

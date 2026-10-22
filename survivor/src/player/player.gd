@@ -54,6 +54,7 @@ var facing_x := 1.0
 var last_dir := Vector2.RIGHT
 var invuln := 0.0
 var stunned := 0.0
+var untargetable := false
 var dead := false
 var flying := false
 var can_fly := false
@@ -131,9 +132,11 @@ func stat(stat_name: String) -> float:
 		v *= 1.0 + Meta.get_total_seal_bonus("move_speed") + Meta.get_bestiary_bonus("move_speed") + bestiary_move * Meta.catalogued_count()
 	elif stat_name == "max_hp":
 		v *= 1.0 + Meta.get_total_seal_bonus("max_hp")
-	elif stat_name == "crit_chance":
-		return crit_chance
-	return v
+    elif stat_name == "crit_chance":
+        return crit_chance
+    if stat_name == "cooldown":
+        v = maxf(0.60, v)
+    return v
 
 
 func refresh() -> void:
@@ -157,10 +160,10 @@ func remove_buff(id: String) -> void:
 
 
 func projectile_multiplier() -> float:
-	var m := 1.0
-	for k in proj_mults.keys():
-		m *= float(proj_mults[k])
-	return m
+    var m := 1.0
+    for k in proj_mults.keys():
+        m *= float(proj_mults[k])
+    return minf(m, 3.0)
 
 
 func scaled_count(n: int) -> int:
@@ -206,7 +209,7 @@ func _process(delta: float) -> void:
 	_target_t -= delta
 	if _target_t <= 0.0:
 		_target_t = 0.08
-		_target = world.enemies.nearest(global_position, 520.0)
+		_target = world.enemies.nearest(global_position, 520.0, {})
 	var input := Input.get_vector("move_left", "move_right", "move_up", "move_down")
 	if world.touch_controls != null:
 		input = (input + world.touch_controls.move_vector).limit_length(1.0)
@@ -253,8 +256,11 @@ func _tick_timers(delta: float) -> void:
 			world.fx.ring(global_position, 4.0, 40.0, 0.3, Color(0.9, 0.95, 1.0), 2.0)
 
 
+func is_moving() -> bool:
+	return vel.length() > 12.0 or dash_t > 0.0
+
 func _animate(delta: float, _input: Vector2) -> void:
-	var moving := vel.length() > 12.0 or dash_t > 0.0
+	var moving := is_moving()
 	_anim += delta
 	var has_fly := sprite.hframes >= 8
 	if flying and has_fly:
@@ -360,7 +366,7 @@ func aura_flash(radius: float, color: Color) -> void:
 
 # ------------------------------------------------------------------ damage / death
 func take_damage(amount: float, hits_air: bool = false, _source: String = "") -> void:
-	if dead or invuln > 0.0:
+	if dead or invuln > 0.0 or untargetable:
 		return
 	if Game.godmode:
 		return
@@ -379,10 +385,12 @@ func take_damage(amount: float, hits_air: bool = false, _source: String = "") ->
 			armor = 0.0
 			passive.on_armor_break()
 		return
-	hp -= amount
-	invuln = 0.55
-	_hurt_flash = 0.12
-	hurt.emit()
+    hp -= amount
+    invuln = 0.55
+    _hurt_flash = 0.12
+    hurt.emit()
+    if world != null:
+        world.on_player_hurt(amount)
 	Audio.sfx("player_hit", -2.0)
 	Game.shake(4.5)
 	Game.hit_stop(0.05, 0.05)
@@ -445,12 +453,12 @@ func _late_scaled_value(up: UpgradeDef) -> float:
 	var t := 0.0
 	if world != null:
 		t = float(world.run_time)
-	var f := 1.0 + minf(t, 1800.0) / 1800.0 * 0.6
-	if up.op == "mul":
-		if v >= 1.0:
-			return 1.0 + (v - 1.0) * f
-		return 1.0 - (1.0 - v) * f
-	return v * f
+    var f := 1.0 + minf(t, 1800.0) / 1800.0 * 0.15
+    if up.op == "mul":
+        if v >= 1.0:
+            return 1.0 + (v - 1.0) * f
+        return 1.0 - (1.0 - v) * f
+    return v * f
 
 
 func apply_chest_weapon(id: String) -> String:
