@@ -8,6 +8,7 @@ flag keys, card text over 110 chars, caps that name params an ability does not h
 Icons: reports how many art/evo/<id>.png files exist; with --strict-icons a missing icon is an error.
 """
 import copy
+import json
 import os
 import re
 import sys
@@ -18,10 +19,37 @@ sys.path.insert(0, HERE)
 
 import evo_data  # noqa: E402
 import gen_data  # noqa: E402
+from evo_plans import PLAN_ABILITY_IDS  # noqa: E402
 
 MAX_DESC = 110
 MAX_NAME = 24
 ID_RE = re.compile(r'^[a-z][a-z0-9_]*$')
+
+
+def _tres_base(aid):
+    """Parse the JSON-compatible `base = {...}` line from a hand-maintained ability .tres."""
+    for kind in ('weapons', 'passives'):
+        path = os.path.join(ROOT, 'data', kind, aid + '.tres')
+        if not os.path.isfile(path):
+            continue
+        with open(path, 'rb') as f:
+            text = f.read().decode('utf-8')
+        m = re.search(r'(?m)^base = (\{.*\})$', text)
+        if not m:
+            return None
+        try:
+            return json.loads(m.group(1))
+        except ValueError:
+            return None
+    return None
+
+
+def _check_caps(aid, caps, base, errors):
+    for param, c in caps.items():
+        if param not in base:
+            errors.append('%s: cap on %s but the ability has no such base param' % (aid, param))
+        if 'min' in c and 'max' in c and c['min'] > c['max']:
+            errors.append('%s.%s: min > max' % (aid, param))
 
 
 def main():
@@ -58,7 +86,7 @@ def main():
         seen[oid] = '%s/%s/t%d' % (o['ability'], o['branch'], o['tier'])
         if oid in flag_keys:
             errors.append('%s: id collides with an existing branch flag key' % oid)
-        if o['ability'] not in by_id:
+        if o['ability'] not in by_id and o['ability'] not in PLAN_ABILITY_IDS:
             errors.append('%s: unknown ability %s' % (oid, o['ability']))
         if len(o['desc']) > MAX_DESC:
             errors.append('%s: desc is %d chars (max %d)' % (oid, len(o['desc']), MAX_DESC))
@@ -70,14 +98,16 @@ def main():
     # caps
     for aid, caps in evo_data.CAPS.items():
         a = by_id.get(aid)
-        if a is None:
+        if a is not None:
+            _check_caps(aid, caps, a['base'], errors)
+        elif aid in PLAN_ABILITY_IDS:
+            base = _tres_base(aid)
+            if base is None:
+                errors.append('%s: plan ability has no readable .tres base' % aid)
+            else:
+                _check_caps(aid, caps, base, errors)
+        else:
             errors.append('caps for unknown ability %s' % aid)
-            continue
-        for param, c in caps.items():
-            if param not in a['base']:
-                errors.append('%s: cap on %s but the ability has no such base param' % (aid, param))
-            if 'min' in c and 'max' in c and c['min'] > c['max']:
-                errors.append('%s.%s: min > max' % (aid, param))
     for a in abilities:
         if a['id'] not in evo_data.CAPS:
             errors.append('%s: no caps entry' % a['id'])
@@ -85,7 +115,9 @@ def main():
     # icons
     missing = [o['id'] for o in evo_data.OPTIONS
                if not os.path.exists(os.path.join(ROOT, 'art', 'evo', o['id'] + '.png'))]
-    print('options: %d   abilities: %d   icons present: %d / %d' % (total, len(abilities), len(evo_data.OPTIONS) - len(missing), len(evo_data.OPTIONS)))
+    plan_total = len([o for o in evo_data.OPTIONS if o['ability'] in PLAN_ABILITY_IDS])
+    print('options: %d generated + %d plan   abilities: %d   icons present: %d / %d'
+          % (total, plan_total, len(abilities), len(evo_data.OPTIONS) - len(missing), len(evo_data.OPTIONS)))
     if missing and strict_icons:
         errors.extend('missing icon: art/evo/%s.png' % m for m in missing)
 

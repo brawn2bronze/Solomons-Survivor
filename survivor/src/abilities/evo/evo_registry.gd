@@ -27,6 +27,12 @@ const READY := {
 	# prayer (Whip)
 	"consecration": true, "seraph_ring": true, "sanctuary": true, "lay_on_hands": true,
 	"tolling_bell": true, "verdict_mark": true, "final_judgement": true, "twin_suns": true,
+	# merlins_book (ChainLightning)
+	"static_charge": true, "lightning_lance": true, "blink_strike": true, "capacitor": true,
+	"orbit_guard": true, "rolling_thunder": true, "singularity": true, "faraday_cage": true,
+	# astral_projection (AstralClone)
+	"astral_anchor": true, "mirror_image": true, "astral_swap": true, "ethereal_walk": true,
+	"spell_echo": true, "flow_state": true, "time_stop": true, "wild_magic": true,
 }
 
 static func is_ready(id: String) -> bool:

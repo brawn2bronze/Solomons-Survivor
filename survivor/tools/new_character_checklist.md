@@ -65,7 +65,8 @@ file) and the DB autoload picks it up with zero code changes.
 - [ ] Which elite pressures it (brute grounds you? whelp outranges you?) and the intended answer:
 
 ## 8. Definition of done
-- [ ] `python3 tools/check_project.py` → PASS (add art-size rows for any new folders you introduce):
+- [ ] `python survivor/tools/check_project.py` → PASS (add art-size rows for any new folders you introduce):
+- [ ] `python survivor/tools/evo.py check` → OK if changes touch evolutions
 - [ ] Character appears in roster, kit text + icons + showcase cycle render on character select:
 - [ ] Level-up offers weapon/passive cards with animated previews; branch pair forces at Lv 3:
 - [ ] Status icons appear above heads in a live run (stun / fear / poison / rage as applicable):

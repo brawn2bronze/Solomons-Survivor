@@ -11,36 +11,6 @@ const MILESTONE_LEVELS := [10, 13]  # small pacing bumps between the evolutions
 ## Snapshot state (Descent checkpoint, Phase 3). Single source for to_dict/from_dict
 ## so the two never drift (check_project verifies the round-trip statically).
 const STATE_KEYS := ["level", "branch", "branch_level", "evo1", "evo2"]
-## Evolution option ids whose behavior code is live. A tier is only offered
-## when BOTH of its options are in this set, so each slice ships on its own
-## (extend when a slice's behaviors + data land; workbench §9).
-const READY_EVOS := [
-	# six_shooter (Revolver)
-	"running_reload", "fan_the_hammer", "quickdraw", "showdown",
-	"ricochet_rounds", "long_barrel", "dead_eye", "dead_mans_hand",
-	# katana (MeleeSwipe)
-	"wayfinder", "momentum_edge", "moonfall_whirl", "afterimage",
-	"weaving_blades", "unbroken_combo", "thousand_cuts", "reprisal",
-	# flailing_whip (Whip)
-	"twirling_lasso", "dragging_chain", "roundup", "barbed_fence",
-	"sweet_spot", "snap_parry", "fast_hands", "wanted_poster",
-	# flash_bombs (StunPulse)
-	"smoke_veil", "trailing_mines", "vanish", "cascade_flash",
-	"killing_light", "panic_powder", "kawarimi", "five_point_palm",
-	# hand_cannon (Cannon)
-	"chain_shot", "broadside", "phantom_broadside", "bombard",
-	"rebound", "kickback", "burning_pitch", "primed_powder",
-	# pirate_crew (SummonAllies)
-	"gun_crew", "boarding_party", "jolly_roger", "x_marks_the_spot",
-	"grog_rations", "human_shield", "man_overboard", "release_the_kraken",
-	# greatsword (MeleeSwipe)
-	"crusaders_march", "mirror_wave", "dawnbreaker", "pilgrims_road",
-	"fervor", "retribution", "holy_leap", "bulwark_stance",
-	# prayer (Whip)
-	"consecration", "seraph_ring", "sanctuary", "lay_on_hands",
-	"tolling_bell", "verdict_mark", "final_judgement", "twin_suns",
-]
-
 var def
 var player: Player
 var level := 1
@@ -262,7 +232,7 @@ func needs_branch() -> bool:
 
 ## Evolution-ready: picked branch, threshold reached, tier not taken. Bonus
 ## power only — leveling never waits for it. The tier also requires both
-## option ids in READY_EVOS (unimplemented slices never appear).
+## option ids in EvoRegistry.READY (unimplemented slices never appear).
 func needs_evo(tier: int) -> bool:
 	if not evolvable():
 		return false
@@ -292,7 +262,7 @@ func _tier_ready(tier: int) -> bool:
 		var opt = (t as Array)[i]
 		if not (opt is Dictionary):
 			return false
-		if not READY_EVOS.has(String((opt as Dictionary).get("id", ""))):
+		if not EvoRegistry.is_ready(String((opt as Dictionary).get("id", ""))):
 			return false
 	return true
 

@@ -16,13 +16,16 @@ Card text (desc) is at most 110 characters. Tuning numbers are first-pass; the s
 
 import os
 
+from evo_plans import PLAN_CAPS, PLAN_OPTIONS
+from evo_plans._common import option as _option
+
 ICON_DIR = 'res://art/evo/'
 
 OPTIONS = []
 
 
 def E(ability, branch, tier, oid, name, desc, brief, **params):
-    OPTIONS.append(dict(ability=ability, branch=branch, tier=tier, id=oid, name=name, desc=desc, brief=brief, params=params))
+    OPTIONS.append(_option(ability, branch, tier, oid, name, desc, brief, **params))
 
 
 # ======================================================================================== COWBOY
@@ -225,11 +228,14 @@ E('turds', 'b', 1, 'ripe_turds', 'Ripe Turds', 'A turd left undisturbed for 4s b
 E('turds', 'b', 2, 'venomous_honk', 'Venomous Honk', 'Fear also poisons enemies for 4s.', 'Honking beak dripping poison', poison_time=4.0)
 E('turds', 'b', 2, 'toxic_swamp', 'Toxic Swamp', 'Every 20s you create a 140px swamp for 8s: enemies are slowed 50% and poisoned, and you regenerate.', 'Bubbling green swamp', cooldown=20.0, life=8.0, radius=140.0, slow=0.5, regen=2.0)
 
+# Hand-added characters live in evo_plans/<character>.py; add their modules to evo_plans.PLAN_MODULES.
+OPTIONS.extend(PLAN_OPTIONS)
+
 
 # ======================================================================================== CAPS
 # Per-ability hard limits on the computed `p` params, enforced by Ability._clamp_p() at the end of recompute().
 # {'param': {'min': x, 'max': y}}  either bound optional. apply() converts each entry to the
-# [min, max] array shape the game reads (Ability._clamp_p, tools/check_evo.gd); a missing bound
+# [min, max] array shape the game reads (Ability._clamp_p, tools/check_evo.py); a missing bound
 # becomes 0.0 / 999.0. First-pass values: tune with the simulator.
 CAPS = {
     'katana': {'cooldown': {'min': 0.30}, 'radius': {'max': 130.0}},
@@ -253,6 +259,7 @@ CAPS = {
     'fear': {'interval': {'min': 2.5}, 'fear_radius': {'max': 190.0}, 'fear_time': {'max': 1.8}},
     'turds': {'max_turds': {'max': 6}, 'interval': {'min': 2.0}, 'stun': {'max': 1.5}},
 }
+CAPS.update(PLAN_CAPS)
 
 
 # ======================================================================================== merge into gen_data
@@ -273,8 +280,9 @@ def _cap_pair(c):
 def apply(abilities, only=None):
     """Fill evo1/evo2 on every branch and `caps` on every ability.
 
-    only: optional iterable of ability ids to receive evo tables (None = all 20/160 options).
-    Caps always land on every ability in CAPS - clamps are safe before behaviors exist.
+    only: optional iterable of ability ids to receive evo tables (None = every option in OPTIONS).
+    Caps always land on every ability in CAPS that is present in `abilities` - clamps are safe before behaviors exist.
+    Hand-added abilities live in evo_plans and are skipped here until they appear in the generated list.
     """
     by_id = {a['id']: a for a in abilities}
     slots = {}
@@ -283,8 +291,12 @@ def apply(abilities, only=None):
             continue
         slots.setdefault((o['ability'], o['branch'], o['tier']), []).append(o)
     for (aid, br, tier), opts in slots.items():
+        if aid not in by_id:
+            continue
         branch = by_id[aid]['branches'][0 if br == 'a' else 1]
         branch['evo1' if tier == 1 else 'evo2'] = [_option_dict(o) for o in opts]
     for aid, caps in CAPS.items():
+        if aid not in by_id:
+            continue
         by_id[aid]['caps'] = {k: _cap_pair(c) for k, c in caps.items()}
     return abilities

@@ -5,8 +5,9 @@
     1. check_text.ps1          whitespace / encoding guard        (no engine, no python)
     2. check_project.py        static project checks + GDScript lint (python)
     3. check_evo.py            evolution option coverage          (no engine)
-    4. check_black_market.py   black market data checks           (no engine)
-    5. check_parse.ps1         the real Godot engine parse check  (needs Godot)
+    4. evo.py check            evolution wiring errors only       (no engine)
+    5. check_black_market.py   black market data checks           (no engine)
+    6. check_parse.ps1         the real Godot engine parse check  (needs Godot)
 
   Every tier prints its own verdict; this script adds the summary and the exit code.
 
@@ -88,7 +89,17 @@ if ($pyPath) {
   Add-Result -Tier "check_evo" -Code 2 -Note "python not found"
 }
 
-# ---- 4. black market data --------------------------------------------------------------------
+# ---- 4. evolution wiring (dangerous errors only; todo slices are normal) ----------------------
+if ($pyPath) {
+  Invoke-Tier -Tier "evo_wiring" -Exe $pyPath -TierArgs @((Join-Path $PSScriptRoot "evo.py"), "check")
+} else {
+  Write-Output ""
+  Write-Output "=== evo_wiring ==="
+  Write-Output "evo_wiring: python not found - tier skipped"
+  Add-Result -Tier "evo_wiring" -Code 2 -Note "python not found"
+}
+
+# ---- 5. black market data --------------------------------------------------------------------
 if ($pyPath) {
   Invoke-Tier -Tier "check_black_market" -Exe $pyPath -TierArgs (@((Join-Path $PSScriptRoot "check_black_market.py")) + $pyStrict)
 } else {
@@ -98,7 +109,7 @@ if ($pyPath) {
   Add-Result -Tier "check_black_market" -Code 2 -Note "python not found"
 }
 
-# ---- 5. the engine ----------------------------------------------------------------------------
+# ---- 6. the engine ----------------------------------------------------------------------------
 $parseArgs = @("-NoProfile", "-ExecutionPolicy", "Bypass", "-File", (Join-Path $PSScriptRoot "check_parse.ps1"))
 if ($Deep) { $parseArgs += "-Deep" }
 if ($Strict) { $parseArgs += "-Strict" }

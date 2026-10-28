@@ -1021,9 +1021,42 @@ class MeleeBite extends Ability:
 # =============================================================================================== Wizard
 class ChainLightning extends Ability:
     var orbs: Array = []
+    var merlin_orbs: Array = []
+    var static_charge := 0.0
+    var capacitor_meter := 0
+    var capacitor_tell := -1.0
+    var blink_cd := 0.0
+    var singularity_active := false
+    var singularity_t := 0.0
+    var singularity_pos := Vector2.ZERO
+    var singularity_orbs: Array = []
+    var faraday_active := false
+    var faraday_t := 0.0
+    var faraday_orbs: Array = []
+    var rolling_list: Array = []
 
     func update(delta: float) -> void:
+        if blink_cd > 0.0:
+            blink_cd -= delta
+        if capacitor_tell > 0.0:
+            capacitor_tell -= delta
+            if capacitor_tell <= 0.0:
+                _capacitor_fire()
+        if singularity_active:
+            singularity_t -= delta
+            _update_singularity(delta)
+            if singularity_t <= 0.0:
+                _singularity_detonate()
+        if faraday_active:
+            faraday_t -= delta
+            if faraday_t <= 0.0:
+                faraday_active = false
+                faraday_orbs.clear()
+        if has_evo("static_charge"):
+            static_charge = minf(float(evo_param("static_charge", "max_bonus_chains", 4.0)), static_charge + float(evo_param("static_charge", "build_per_sec", 1.0)) * delta)
         _update_orbs(delta)
+        _update_merlin_orbs(delta)
+        _update_rolling(delta)
         t -= delta
         if t > 0.0:
             return
@@ -1032,15 +1065,31 @@ class ChainLightning extends Ability:
             t = 0.05
             return
         t = float(p["cooldown"]) * cd()
+        player.passive.hook("on_player_cast", {"ability": "merlins_book", "origin": player.global_position, "target": tgt, "pos": tgt.pos})
         var used: Dictionary = {}
         var bolts: int = player.scaled_count(1)
-        for b in bolts:
-            var first: EnemyManager.E = tgt if b == 0 else world().enemies.nearest(player.global_position, float(p["range"]), used)
-            if first == null:
-                break
-            used[first.uid] = true
-            _zap(first, b)
+        if has_evo("blink_strike") and blink_cd <= 0.0:
+            _blink_strike(tgt)
+            if has_evo("static_charge"):
+                static_charge = maxf(0.0, static_charge - 1.0)
+        if has_evo("capacitor") and capacitor_meter >= int(evo_param("capacitor", "meter", 10)):
+            capacitor_meter = 0
+            capacitor_tell = float(evo_param("capacitor", "tell", 0.4))
+            return
+        if has_evo("lightning_lance"):
+            _lance(tgt)
+        else:
+            for b in bolts:
+                var first: EnemyManager.E = tgt if b == 0 else world().enemies.nearest(player.global_position, float(p["range"]), used)
+                if first == null:
+                    break
+                used[first.uid] = true
+                _zap(first, b)
         Audio.sfx("lightning_bolt", -5.0)
+        if has_evo("static_charge"):
+            static_charge = maxf(0.0, static_charge - 1.0)
+        if has_evo("capacitor"):
+            capacitor_meter += 1
 
     func _zap(first: EnemyManager.E, idx: int) -> void:
         var col := Color(0.55, 0.85, 1.0)
@@ -1048,8 +1097,16 @@ class ChainLightning extends Ability:
         hit[first.uid] = true
         var from := player.fire_origin(idx, (first.pos - player.global_position).normalized()) + Vector2(0, -6)
         var cur: EnemyManager.E = first
-        for i in int(p["chains"]) + 1:
-            world().enemies.damage(cur, dmg() * (1.0 if i == 0 else 0.8), Vector2.ZERO, 0.0, col)
+        var chains := int(p["chains"]) + 1
+        if has_evo("static_charge"):
+            chains += int(minf(static_charge, float(evo_param("static_charge", "max_bonus_chains", 4.0))))
+        for i in chains:
+            var dmg_mult := 1.0 if i == 0 else 0.8
+            if has_evo("static_charge"):
+                dmg_mult *= 1.0 + float(evo_param("static_charge", "bleed_per_sec", 0.5)) * 0.1
+            world().enemies.damage(cur, dmg() * dmg_mult, Vector2.ZERO, 0.0, col)
+            if has_evo("static_charge"):
+                world().enemies.damage(cur, dmg() * float(evo_param("static_charge", "bleed_per_sec", 0.5)) * 0.2, Vector2.ZERO, 0.0, col)
             world().fx.bolt(WeaponBehaviors.jagged(from, cur.pos + Vector2(0, -8)), col, 0.2)
             world().fx.attack_flourish(player.global_position, cur.pos - player.global_position)
             world().fx.emit(cur.pos + Vector2(0, -8), Vector2.ZERO, 0.1, 9.0, Color(0.85, 0.95, 1.0), 1, 0.0)
@@ -1062,12 +1119,147 @@ class ChainLightning extends Ability:
         world().fx.strike(first.pos)
         if flags.get("orb", false):
             _place_orb(first.pos)
+        if has_evo("orbit_guard") and merlin_orbs.size() < int(evo_param("orbit_guard", "orbs", 3)):
+            _spawn_orbit_orb(player.global_position)
+        if has_evo("rolling_thunder"):
+            _spawn_rolling((first.pos - player.global_position).normalized())
+        _check_singularity_orbs()
 
     func _place_orb(pos: Vector2) -> void:
         if orbs.size() >= 3:
             orbs.pop_front()
         orbs.append({"pos": pos, "t": float(p["orb_time"]), "tick": 0.2})
         world().fx.ring(pos, 3.0, 22.0, 0.25, Color(0.7, 0.9, 1.0), 2.0)
+        _check_singularity_orbs()
+
+    func _check_singularity_orbs() -> void:
+        if not has_evo("singularity") and not has_evo("faraday_cage"):
+            return
+        if singularity_active or faraday_active:
+            return
+        var need := 3
+        if has_evo("singularity"):
+            need = int(evo_param("singularity", "orbs_needed", 3))
+        elif has_evo("faraday_cage"):
+            need = int(evo_param("faraday_cage", "orbs_needed", 3))
+        if merlin_orbs.size() + orbs.size() < need:
+            return
+        if has_evo("singularity"):
+            singularity_active = true
+            singularity_t = float(evo_param("singularity", "drift_time", 4.0))
+            singularity_pos = player.global_position
+            singularity_orbs.clear()
+            var take: int = mini(need, merlin_orbs.size())
+            for i in take:
+                singularity_orbs.append(merlin_orbs.pop_front())
+            while singularity_orbs.size() < need and not orbs.is_empty():
+                singularity_orbs.append(orbs.pop_front())
+            for i in singularity_orbs.size():
+                world().add_decal({"kind": "lightning_scar", "pos": singularity_pos, "t": 0.0, "life": 0.3, "r": 18.0, "dead": false})
+        elif has_evo("faraday_cage"):
+            faraday_active = true
+            faraday_t = 4.0
+            faraday_orbs.clear()
+            var take2: int = mini(need, merlin_orbs.size())
+            for i in take2:
+                faraday_orbs.append(merlin_orbs.pop_front())
+            while faraday_orbs.size() < need and not orbs.is_empty():
+                faraday_orbs.append(orbs.pop_front())
+
+    func _update_singularity(delta: float) -> void:
+        if not has_evo("singularity"):
+            return
+        var pull := float(evo_param("singularity", "pull_px", 60.0))
+        var r := float(evo_param("singularity", "radius", 110.0))
+        singularity_pos = player.global_position
+        for e in world().enemies.query_circle(singularity_pos, r):
+            var dir: Vector2 = (singularity_pos - e.pos).normalized()
+            e.pos += dir * pull * delta
+            world().enemies.stun(e, 0.12)
+        world().fx.emit(singularity_pos + Vector2(0, -6), Vector2.ZERO, 0.08, 12.0, Color(0.7, 0.9, 1.0), 1, 0.0)
+        world().add_decal({"kind": "lightning_scar", "pos": singularity_pos + Vector2(randf_range(-10,-2), randf_range(-6,0)), "t": 0.0, "life": 0.25, "r": 10.0, "dead": false})
+
+    func _singularity_detonate() -> void:
+        if not has_evo("singularity"):
+            singularity_active = false
+            return
+        var r := float(evo_param("singularity", "radius", 110.0))
+        var mult := float(evo_param("singularity", "detonate_mult", 3.0))
+        var pos := singularity_pos
+        for e in world().enemies.query_circle(pos, r):
+            world().enemies.damage(e, dmg() * mult, Vector2.ZERO, 0.0, Color(0.7, 0.9, 1.0))
+            world().enemies.stun(e, 0.35)
+        world().fx.ring(pos, 8.0, r, 0.4, Color(0.7, 0.9, 1.0), 4.0)
+        world().fx.strike(pos)
+        world().add_decal({"kind": "lightning_scar", "pos": pos, "t": 0.0, "life": 1.2, "r": 26.0, "dead": false})
+        singularity_active = false
+        singularity_orbs.clear()
+
+    func _blink_strike(tgt: EnemyManager.E) -> void:
+        if not has_evo("blink_strike"):
+            return
+        var cdv := float(evo_param("blink_strike", "cooldown", 8.0))
+        blink_cd = cdv
+        var dist := float(evo_param("blink_strike", "distance", 200.0))
+        var scar_mult := float(evo_param("blink_strike", "scar_mult", 0.6))
+        var ring_r := float(evo_param("blink_strike", "ring_radius", 60.0))
+        var inv := float(evo_param("blink_strike", "invuln", 0.25))
+        var start := player.global_position
+        var dir := (tgt.pos - start).normalized()
+        var end := tgt.pos - dir * 16.0
+        if end.distance_to(start) > dist:
+            end = start + dir * dist
+        world().add_decal({"kind": "lightning_scar", "pos": start, "t": 0.0, "life": 0.8, "r": 16.0, "dead": false})
+        player.blink_to(end, inv)
+        player.go_untargetable(inv)
+        world().add_decal({"kind": "lightning_scar", "pos": end, "t": 0.0, "life": 0.8, "r": 16.0, "dead": false})
+        for e in world().enemies.query_circle(end, ring_r):
+            world().enemies.damage(e, dmg() * scar_mult, Vector2.ZERO, 0.0, Color(0.7, 0.9, 1.0))
+            world().enemies.stun(e, 0.25)
+        world().fx.ring(end, 6.0, ring_r, 0.25, Color(0.7, 0.9, 1.0), 3.0)
+
+    func _lance(tgt: EnemyManager.E) -> void:
+        if not has_evo("lightning_lance"):
+            return
+        var width := float(evo_param("lightning_lance", "width", 14.0))
+        var length := float(evo_param("lightning_lance", "length", 520.0))
+        var from := player.global_position + Vector2(0, -6)
+        var dir := (tgt.pos - from).normalized()
+        var to := from + dir * length
+        var col := Color(0.7, 0.9, 1.0)
+        world().fx.bolt(WeaponBehaviors.jagged(from, to, 10, 12.0), col, 0.22)
+        for e in world().enemies.query_segment(from, to, width):
+            world().enemies.damage(e, dmg() * 0.9, Vector2.ZERO, 0.0, col)
+            world().enemies.stun(e, 0.3)
+        world().add_decal({"kind": "lightning_scar", "pos": to, "t": 0.0, "life": 0.6, "r": 18.0, "dead": false})
+
+    func _capacitor_fire() -> void:
+        if not has_evo("capacitor"):
+            return
+        var bolts := int(evo_param("capacitor", "bolts", 12))
+        var bmult := float(evo_param("capacitor", "bolt_mult", 0.6))
+        var col := Color(0.7, 0.9, 1.0)
+        var used: Dictionary = {}
+        var origin := player.global_position
+        for i in bolts:
+            var first: EnemyManager.E = world().enemies.nearest(origin, float(p["range"]), used)
+            if first == null:
+                break
+            used[first.uid] = true
+            var hit: Dictionary = {first.uid: true}
+            var from := origin + Vector2(0, -6)
+            var cur := first
+            for j in int(p["chains"]) + 1:
+                world().enemies.damage(cur, dmg() * bmult, Vector2.ZERO, 0.0, col)
+                world().enemies.stun(cur, 0.2)
+                world().fx.bolt(WeaponBehaviors.jagged(from, cur.pos + Vector2(0, -8)), col, 0.16)
+                from = cur.pos + Vector2(0, -8)
+                var nxt: EnemyManager.E = world().enemies.nearest(cur.pos, float(p["chain_range"]), hit)
+                if nxt == null:
+                    break
+                hit[nxt.uid] = true
+                cur = nxt
+            world().add_decal({"kind": "lightning_scar", "pos": first.pos, "t": 0.0, "life": 0.5, "r": 14.0, "dead": false})
 
     func _update_orbs(delta: float) -> void:
         for i in range(orbs.size() - 1, -1, -1):
@@ -1088,6 +1280,56 @@ class ChainLightning extends Ability:
                     world().fx.bolt(WeaponBehaviors.jagged(pos + Vector2(0, -6), e.pos + Vector2(0, -8), 4, 5.0), Color(0.6, 0.85, 1.0), 0.14)
             if float(o["t"]) <= 0.0:
                 orbs.remove_at(i)
+
+    func _spawn_orbit_orb(center: Vector2) -> void:
+        if not has_evo("orbit_guard"):
+            return
+        merlin_orbs.append({"type": "orbit", "angle": randf() * TAU, "r": float(evo_param("orbit_guard", "orbit_radius", 60.0)), "tick": 0.0})
+        world().add_decal({"kind": "lightning_scar", "pos": center, "t": 0.0, "life": 0.2, "r": 12.0, "dead": false})
+
+    func _spawn_rolling(dir: Vector2) -> void:
+        if not has_evo("rolling_thunder"):
+            return
+        rolling_list.append({"pos": player.global_position, "dir": dir.normalized(), "t": float(evo_param("rolling_thunder", "life", 3.0)), "tick": 0.0})
+
+    func _update_merlin_orbs(delta: float) -> void:
+        if not has_evo("orbit_guard"):
+            return
+        var r := float(evo_param("orbit_guard", "orbit_radius", 60.0))
+        var zr := float(evo_param("orbit_guard", "zap_range", 130.0))
+        var tick := float(evo_param("orbit_guard", "tick", 0.6))
+        for o in merlin_orbs:
+            o["angle"] = float(o["angle"]) + delta * 2.0
+            o["tick"] = float(o["tick"]) - delta
+            var pos := player.global_position + Vector2.from_angle(float(o["angle"])) * r
+            world().fx.emit(pos + Vector2(0, -4), Vector2.ZERO, 0.06, 5.0, Color(0.7, 0.9, 1.0), 1, 0.0)
+            if float(o["tick"]) <= 0.0:
+                o["tick"] = tick
+                var tgt: EnemyManager.E = world().enemies.nearest(pos, zr, {})
+                if tgt != null:
+                    world().enemies.damage(tgt, dmg() * 0.5, Vector2.ZERO, 0.0, Color(0.7, 0.9, 1.0))
+                    world().fx.bolt(WeaponBehaviors.jagged(pos + Vector2(0, -4), tgt.pos + Vector2(0, -8)), Color(0.7, 0.9, 1.0), 0.14)
+
+    func _update_rolling(delta: float) -> void:
+        if not has_evo("rolling_thunder"):
+            return
+        var spd := float(evo_param("rolling_thunder", "speed", 120.0))
+        var life := float(evo_param("rolling_thunder", "life", 3.0))
+        var tick := float(evo_param("rolling_thunder", "tick", 0.4))
+        for i in range(rolling_list.size() - 1, -1, -1):
+            var ro: Dictionary = rolling_list[i]
+            ro["t"] = float(ro["t"]) - delta
+            ro["pos"] = Vector2(ro["pos"]) + Vector2(ro["dir"]) * spd * delta
+            ro["tick"] = float(ro["tick"]) - delta
+            var pos := Vector2(ro["pos"])
+            world().add_decal({"kind": "lightning_scar", "pos": pos, "t": 0.0, "life": 0.4, "r": 14.0, "dead": false})
+            world().fx.emit(pos + Vector2(0, -4), Vector2.ZERO, 0.06, 6.0, Color(0.7, 0.9, 1.0), 1, 0.0)
+            if float(ro["tick"]) <= 0.0:
+                ro["tick"] = tick
+                for e in world().enemies.query_circle(pos, 26.0):
+                    world().enemies.damage(e, dmg() * 0.4, Vector2.ZERO, 0.0, Color(0.7, 0.9, 1.0))
+            if float(ro["t"]) <= 0.0:
+                rolling_list.remove_at(i)
 
 
 # =============================================================================================== Harpy

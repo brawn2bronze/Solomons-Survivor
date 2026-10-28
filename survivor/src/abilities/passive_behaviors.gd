@@ -958,6 +958,11 @@ class SummonAllies extends Ability:
 class AstralClone extends Ability:
     var clone: Sprite2D
     var active_t := 0.0
+    var _anchor_pos := Vector2.ZERO
+    var _anchor_t := 0.0
+    var _proj_count := 0
+    var _flow_extra := 0.0
+    var _wild_t := 0.0
 
     func on_ready() -> void:
         t = float(p["interval"]) * 0.4
@@ -966,10 +971,21 @@ class AstralClone extends Ability:
         if active_t > 0.0:
             active_t -= delta
             var lag: Vector2 = player.history[4]
-            clone.global_position = lag + Vector2(-player.facing_x * 22.0, -2.0 + sin(active_t * 5.0) * 2.0)
+            if has_evo("mirror_image"):
+                var move := player.global_position - lag
+                clone.global_position = player.global_position - move + Vector2(0, -2.0 + sin(active_t * 5.0) * 2.0)
+            elif has_evo("astral_anchor"):
+                clone.global_position = _anchor_pos + Vector2(0, sin(active_t * 5.0) * 2.0)
+                _anchor_t -= delta
+                if _anchor_t <= 0.0:
+                    _anchor_t = 1.4
+                    _anchor_cast()
+            else:
+                clone.global_position = lag + Vector2(-player.facing_x * 22.0, -2.0 + sin(active_t * 5.0) * 2.0)
             clone.frame = player.sprite.frame
             clone.flip_h = player.sprite.flip_h
             clone.modulate.a = clampf(active_t * 2.0, 0.0, 0.55)
+            _wild_magic_update(delta)
             if active_t <= 0.0:
                 _end()
             return
@@ -989,20 +1005,167 @@ class AstralClone extends Ability:
         clone.global_position = player.global_position
         world().actors.add_child(clone)
         active_t = float(p["duration"])
-        player.proj_mults["astral"] = float(p["projectile_mult"])
-        player.sources["astral"] = [clone]
+        _anchor_pos = player.global_position
+        _anchor_t = 1.0
+        _flow_extra = 0.0
+        _wild_t = 0.6
+        if not (has_evo("spell_echo") and bool(evo_param("spell_echo", "replaces_multiplier", true))):
+            player.proj_mults["astral"] = float(p["projectile_mult"])
+            player.sources["astral"] = [clone]
         world().fx.ring(player.global_position, 4.0, 60.0, 0.4, Color(0.6, 0.8, 1.0), 3.0)
         world().announce("ASTRAL PROJECTION  x%.2f" % float(p["projectile_mult"]), false)
         Audio.sfx("lightning_bolt", -8.0, 0.6)
+        if has_evo("ethereal_walk"):
+            var walk := float(evo_param("ethereal_walk", "duration", 4.0))
+            player.go_untargetable(walk)
+            player.add_buff("ethereal_walk", walk, {}, {"cooldown": 2.0})
+        _proj_count += 1
+        if has_evo("time_stop"):
+            var every := int(evo_param("time_stop", "every", 4))
+            if every > 0 and _proj_count % every == 0:
+                _time_stop()
 
     func _end() -> void:
         if clone != null:
-            world().fx.ring(clone.global_position, 2.0, 40.0, 0.3, Color(0.6, 0.8, 1.0), 2.0)
+            if has_evo("astral_swap"):
+                _astral_swap()
+            else:
+                world().fx.ring(clone.global_position, 2.0, 40.0, 0.3, Color(0.6, 0.8, 1.0), 2.0)
             clone.queue_free()
             clone = null
         player.proj_mults.erase("astral")
         player.sources.erase("astral")
+        if has_evo("ethereal_walk"):
+            player.remove_buff("ethereal_walk")
         t = float(p["interval"]) * cd()
+
+    func _dmg(mult: float) -> float:
+        if player.weapon != null:
+            return player.weapon.dmg(mult)
+        return 24.0 * mult
+
+    func hook(name: String, ctx: Dictionary = {}) -> void:
+        if name == "on_player_cast":
+            _clone_weapon_cast(ctx)
+        super.hook(name, ctx)
+
+    func _clone_weapon_cast(_ctx: Dictionary) -> void:
+        if active_t <= 0.0 or clone == null:
+            return
+        if has_evo("spell_echo"):
+            _queue_spell_echo(_ctx)
+
+    func _queue_spell_echo(_ctx: Dictionary) -> void:
+        if not has_evo("spell_echo") or clone == null:
+            return
+        var delay := float(evo_param("spell_echo", "delay", 0.5))
+        var power := float(evo_param("spell_echo", "power", 0.7))
+        var origin := clone.global_position
+        after(delay, func() -> void: _echo_cast(origin, power))
+
+    func _echo_cast(origin: Vector2, power: float) -> void:
+        var tgt: EnemyManager.E = world().enemies.nearest(origin, 320.0, {})
+        if tgt == null:
+            return
+        var col := Color(0.55, 0.85, 1.0)
+        world().fx.bolt(WeaponBehaviors.jagged(origin + Vector2(0, -12), tgt.pos + Vector2(0, -8)), col, 0.18)
+        world().fx.strike(tgt.pos)
+        world().enemies.damage(tgt, _dmg(power), Vector2.ZERO, 0.0, col, "astral_echo")
+
+    func _anchor_cast() -> void:
+        if clone == null:
+            return
+        var tgt: EnemyManager.E = world().enemies.nearest(clone.global_position, 300.0, {})
+        if tgt == null:
+            return
+        var col := Color(0.6, 0.8, 1.0)
+        world().fx.bolt(WeaponBehaviors.jagged(clone.global_position + Vector2(0, -12), tgt.pos + Vector2(0, -8)), col, 0.16)
+        world().enemies.damage(tgt, _dmg(0.6), Vector2.ZERO, 0.0, col, "astral_anchor")
+
+    func _astral_swap() -> void:
+        var other := clone.global_position
+        var here := player.global_position
+        var radius := float(evo_param("astral_swap", "ring_radius", 70.0))
+        var mult := float(evo_param("astral_swap", "ring_mult", 1.0))
+        var inv := float(evo_param("astral_swap", "invuln", 0.2))
+        player.blink_to(other, inv)
+        _detonate(here, radius, mult)
+        _detonate(other, radius, mult)
+
+    func _detonate(pos: Vector2, radius: float, mult: float) -> void:
+        var col := Color(0.6, 0.8, 1.0)
+        world().fx.ring(pos, 6.0, radius, 0.3, col, 3.0)
+        world().fx.strike(pos)
+        for e in world().enemies.query_circle(pos, radius):
+            world().enemies.damage(e, _dmg(mult), (e.pos - pos).normalized(), 80.0, col, "astral_swap")
+
+    func _time_stop() -> void:
+        var freeze := float(evo_param("time_stop", "freeze", 1.5))
+        for e in world().enemies.active:
+            world().enemies.stun(e, freeze)
+        world().fx.ring(player.global_position, 16.0, 460.0, 0.5, Color(0.7, 0.85, 1.0), 4.0)
+        world().announce("TIME STOP", false)
+        Audio.sfx("lightning_bolt", -6.0, 0.5)
+
+    func _flow_state_kill() -> void:
+        if not has_evo("flow_state") or active_t <= 0.0:
+            return
+        var cap := float(evo_param("flow_state", "cap", 4.0))
+        var gain := minf(float(evo_param("flow_state", "per_kill", 0.3)), cap - _flow_extra)
+        if gain <= 0.0:
+            return
+        _flow_extra += gain
+        active_t += gain
+        world().fx.float_text(player.global_position + Vector2(0, -40), "+%0.1fs" % gain, Color(0.7, 0.85, 1.0), 13, 0.7, 18.0)
+
+    func on_kill(_e) -> void:
+        _flow_state_kill()
+
+    func _wild_magic_update(delta: float) -> void:
+        if not has_evo("wild_magic"):
+            return
+        _wild_t -= delta
+        if _wild_t > 0.0:
+            return
+        _wild_t = 1.2
+        var pool: Array = evo_param("wild_magic", "pool", ["frost_nova", "meteor", "gravity_pull"])
+        if pool.is_empty():
+            return
+        var kind := String(pool[randi() % pool.size()])
+        var tell := float(evo_param("wild_magic", "tell", 0.5))
+        var origin := clone.global_position if clone != null else player.global_position
+        if kind == "frost_nova":
+            world().fx.ring(origin, 6.0, 92.0, tell, Color(0.6, 0.85, 1.0), 3.0)
+            after(tell, func() -> void: _wild_nova(origin))
+        elif kind == "meteor":
+            var spot := EvoPrims.densest_cluster(world(), origin, 240.0, 60.0, [])
+            world().fx.ring(spot, 8.0, 70.0, tell, Color(1.0, 0.55, 0.3), 3.0)
+            after(tell, func() -> void: _wild_meteor(spot))
+        else:
+            world().fx.ring(origin, 8.0, 130.0, tell, Color(0.7, 0.5, 1.0), 3.0)
+            after(tell, func() -> void: _wild_pull(origin))
+
+    func _wild_nova(pos: Vector2) -> void:
+        var col := Color(0.6, 0.85, 1.0)
+        world().fx.ring(pos, 10.0, 100.0, 0.3, col, 4.0)
+        for e in world().enemies.query_circle(pos, 100.0):
+            world().enemies.damage(e, _dmg(0.8), (e.pos - pos).normalized(), 60.0, col, "wild_magic")
+            world().enemies.slow(e, 0.4, 2.0)
+
+    func _wild_meteor(pos: Vector2) -> void:
+        var col := Color(1.0, 0.65, 0.3)
+        world().fx.strike(pos)
+        world().fx.ring(pos, 10.0, 72.0, 0.3, col, 4.0)
+        Game.shake(3.0)
+        for e in world().enemies.query_circle(pos, 72.0):
+            world().enemies.damage(e, _dmg(1.4), (e.pos - pos).normalized(), 90.0, col, "wild_magic")
+
+    func _wild_pull(pos: Vector2) -> void:
+        var col := Color(0.7, 0.5, 1.0)
+        world().fx.ring(pos, 8.0, 130.0, 0.3, col, 4.0)
+        for e in world().enemies.query_circle(pos, 130.0):
+            e.pos = e.pos.lerp(pos, 0.35)
+            world().enemies.damage(e, _dmg(0.4), (pos - e.pos).normalized(), 40.0, col, "wild_magic")
 
     func hud_line() -> String:
         return "x%.2f" % float(p["projectile_mult"]) if active_t > 0.0 else "%ds" % maxi(0, ceili(t))
