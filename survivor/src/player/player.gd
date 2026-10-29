@@ -35,6 +35,7 @@ static func is_legendary_unlocked(id: String) -> bool:
 var world
 var def: CharacterDef
 var sprite: Sprite2D
+var visual_scale := 1.0
 var hp := 100.0
 var max_hp := 100.0
 var level := 1
@@ -300,7 +301,7 @@ func _animate(delta: float, _input: Vector2) -> void:
 		bob = -14.0 + sin(_time * 5.0) * 3.0
 	sprite.position.y = lerpf(sprite.position.y, bob, minf(1.0, delta * 12.0))
 	var sq := 1.0 + (sin(_anim * 22.0) * 0.045 if moving else sin(_anim * 5.0) * 0.02)
-	sprite.scale = Vector2(1.0 / sq, sq)
+	sprite.scale = Vector2(1.0 / sq, sq) * visual_scale
 	if _hurt_flash > 0.0:
 		sprite.modulate = Color(1.0, 0.35, 0.35)
 	elif invuln > 0.0 and dash_t <= 0.0:
@@ -390,10 +391,17 @@ func _update_dash(delta: float) -> void:
 				world.enemies.damage(e, dmg_amt, dash_dir, 160.0, col)
 				if dash_opts.get("impale", false):
 					world.enemies.stun(e, 0.7)
+				var hit_cb: Callable = dash_opts.get("hit_cb", Callable())
+				if hit_cb.is_valid():
+					hit_cb.call(e)
 				Game.shake(3.0)
 				Game.hit_stop(0.04, 0.05)
 	if dash_t <= 0.0:
 		vel = dash_dir * 90.0
+		var end_cb: Callable = dash_opts.get("end_cb", Callable())
+		if end_cb.is_valid():
+			dash_opts.erase("end_cb")
+			end_cb.call()
 
 
 func impulse(v: Vector2) -> void:
@@ -427,6 +435,8 @@ func take_damage(amount: float, hits_air: bool = false, source: String = "", sou
 	amount = maxf(1.0, amount * (1.0 - dmg_mitigation) * taken_mult)
 	if armor > 0.0:
 		armor -= amount
+		if passive != null:
+			passive.on_armor_hit(amount, source_pos)
 		world.fx.hit_sparks(global_position + Vector2(0, -12), Vector2.ZERO, Color(1.0, 0.85, 0.4), 6)
 		Audio.sfx("horn_swipe", -8.0, 1.6)
 		invuln = 0.18

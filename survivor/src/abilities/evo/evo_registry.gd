@@ -33,6 +33,12 @@ const READY := {
 	# astral_projection (AstralClone)
 	"astral_anchor": true, "mirror_image": true, "astral_swap": true, "ethereal_walk": true,
 	"spell_echo": true, "flow_state": true, "time_stop": true, "wild_magic": true,
+	# horns (MeleeSwipe)
+	"fling": true, "hook_swing": true, "labrys_whirl": true, "labyrinth_walls": true,
+	"steered_rush": true, "skewer": true, "ramming_speed": true, "breaking_charge": true,
+	# beasts_roar (Roar)
+	"spiked_hide": true, "warcry_shockwave": true, "armored_charge": true, "outnumbered": true,
+	"thundering_hooves": true, "bulldozer": true, "last_stand": true, "armor_burst": true,
 }
 
 static func is_ready(id: String) -> bool:

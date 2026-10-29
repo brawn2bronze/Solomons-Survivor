@@ -1195,6 +1195,8 @@ func damage(e: E, amount: float, knock_dir: Vector2 = Vector2.ZERO, knock_force:
 		var wm: Dictionary = e.marks["wanted_poster"]
 		if player.global_position.distance_to(e.pos) <= float(wm.get("leash", 260.0)):
 			amount *= float(wm.get("taken", 1.25))
+	if not is_dummy and e.marks.has("vulnerable"):
+		amount *= float((e.marks["vulnerable"] as Dictionary).get("taken", 1.25))
 	if not is_dummy and src == "" and e.marks.has("killing_light"):
 		amount *= float((e.marks["killing_light"] as Dictionary).get("mult", 2.0))
 		e.stun = 0.0

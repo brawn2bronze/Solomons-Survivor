@@ -468,6 +468,11 @@ func on_armor_break() -> void:
 	pass
 
 
+## Called when roar armor absorbs a hit, before hp is touched.
+func on_armor_hit(_amount: float, _source_pos: Vector2) -> void:
+	pass
+
+
 func draw_overlay(_canvas: Node2D) -> void:
 	pass
 

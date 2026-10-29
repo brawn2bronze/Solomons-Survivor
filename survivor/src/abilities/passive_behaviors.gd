@@ -1227,48 +1227,142 @@ class Web extends Ability:
 # =============================================================================================== Minotaur roar
 class Roar extends Ability:
     var active_t := 0.0
+    var roar_strength := 1.0
+    var roar_stomp_t := 0.0
+    var roar_stand_cd := 0.0
 
     func on_ready() -> void:
         t = float(p["interval"]) * 0.5
 
     func update(delta: float) -> void:
+        if roar_stand_cd > 0.0:
+            roar_stand_cd -= delta
         if active_t > 0.0:
             active_t -= delta
+            _roar_tick(delta)
             if active_t <= 0.0:
                 _expire()
+            return
+        if has_evo("last_stand") and roar_stand_cd <= 0.0 and player.hp <= player.max_hp * float(evo_param("last_stand", "hp_frac", 0.3)):
+            roar_stand_cd = float(evo_param("last_stand", "cooldown", 40.0))
+            _roar(float(evo_param("last_stand", "strength", 1.5)))
             return
         t -= delta
         if t <= 0.0:
             _roar()
 
-    func _roar() -> void:
+    func _roar(strength: float = 1.0) -> void:
         var origin := player.global_position + Vector2(0, -12)
+        roar_strength = strength
         active_t = float(p["duration"])
-        player.armor = float(p["armor_hp"])
-        player.add_buff("roar", active_t, {}, {"damage": 1.0 + float(p["boost_damage"]), "move_speed": 1.0 + float(p["boost_speed"])})
+        roar_stomp_t = 0.0
+        player.armor = float(p["armor_hp"]) * strength
+        player.add_buff("roar", active_t, {}, {"damage": 1.0 + float(p["boost_damage"]) * strength, "move_speed": 1.0 + float(p["boost_speed"]) * strength})
         world().fx.ring(origin, 6.0, 150.0, 0.5, Color(1.0, 0.7, 0.35), 5.0)
         world().fx.ring(origin, 3.0, 90.0, 0.35, Color(1, 1, 1), 3.0)
         for e in world().enemies.query_circle(origin, 120.0):
             world().enemies.fear(e, 0.8, origin)
+        if has_evo("warcry_shockwave"):
+            _warcry(origin)
+        if has_evo("armored_charge") and player.weapon != null and player.weapon.has_method("horn_force_charge"):
+            player.weapon.horn_force_charge(float(evo_param("armored_charge", "distance", 240.0)))
+        if has_evo("bulldozer"):
+            player.visual_scale = float(evo_param("bulldozer", "scale", 1.4))
         world().announce("BEAST'S ROAR", false)
         Audio.sfx("horn_swipe", -2.0, 0.5)
         Game.shake(6.0)
 
+    func _roar_tick(delta: float) -> void:
+        if has_evo("outnumbered"):
+            var n: int = world().enemies.query_circle(player.global_position, float(evo_param("outnumbered", "radius", 120.0))).size()
+            var bonus := minf(float(evo_param("outnumbered", "cap", 0.3)), float(n) * float(evo_param("outnumbered", "per_enemy", 0.03)))
+            player.add_buff("roar_outnumbered", 0.12, {}, {"damage": 1.0 + bonus})
+        if has_evo("thundering_hooves") and player.is_moving():
+            roar_stomp_t -= delta
+            if roar_stomp_t <= 0.0:
+                roar_stomp_t = float(evo_param("thundering_hooves", "stomp_every", 0.5))
+                _roar_stomp()
+        if has_evo("bulldozer"):
+            player.stunned = 0.0
+            player.visual_scale = float(evo_param("bulldozer", "scale", 1.4))
+            if player.is_walking():
+                var radius := float(evo_param("bulldozer", "shove_radius", 30.0))
+                for e in world().enemies.query_circle(player.global_position, radius):
+                    var away: Vector2 = e.pos - player.global_position
+                    if away.length_squared() < 0.01:
+                        away = player.last_dir
+                    e.knock += away.normalized() * 260.0
+
+    func _roar_stomp() -> void:
+        var origin := player.global_position + Vector2(0, -10)
+        var rr := float(evo_param("thundering_hooves", "radius", 40.0)) * player.stat("area")
+        var amount := _roar_dmg(float(evo_param("thundering_hooves", "mult", 0.4)))
+        for e in world().enemies.query_circle(origin, rr):
+            world().enemies.damage(e, amount, e.pos - origin, 80.0, def.color, "thundering_hooves")
+        world().fx.ring(origin, 4.0, rr, 0.2, Color(0.95, 0.75, 0.45), 2.0)
+
+    func _warcry(origin: Vector2) -> void:
+        var radius := float(evo_param("warcry_shockwave", "radius", 140.0))
+        var push := float(evo_param("warcry_shockwave", "push_px", 100.0)) * 8.0
+        for e in world().enemies.query_circle(origin, radius):
+            var away: Vector2 = e.pos - origin
+            if away.length_squared() < 0.01:
+                away = player.last_dir
+            e.knock += away.normalized() * push
+        if bool(evo_param("warcry_shockwave", "destroy_projectiles", true)):
+            world().projectiles.intercept(origin, radius, "destroy")
+        world().fx.ring(origin, 8.0, radius, 0.3, Color(1.0, 0.8, 0.5), 3.0)
+
     func _expire() -> void:
         player.armor = 0.0
         player.remove_buff("roar")
+        player.remove_buff("roar_outnumbered")
+        player.visual_scale = 1.0
+        active_t = 0.0
+        roar_strength = 1.0
         t = float(p["interval"]) * cd()
 
     func on_armor_break() -> void:
-        # caveat from the design: broken armor stuns the minotaur
         active_t = 0.0
         player.remove_buff("roar")
-        player.stun(float(p["break_stun"]))
-        world().fx.ring(player.global_position + Vector2(0, -12), 6.0, 70.0, 0.4, Color(1.0, 0.4, 0.3), 4.0)
-        world().announce("ARMOR BROKEN - STUNNED", true)
+        player.remove_buff("roar_outnumbered")
+        player.visual_scale = 1.0
+        var origin := player.global_position + Vector2(0, -12)
+        if has_evo("armor_burst"):
+            player.invuln = maxf(player.invuln, float(evo_param("armor_burst", "invuln", 1.0)))
+            var rr := 90.0 * player.stat("area")
+            var amount := _roar_dmg(float(evo_param("armor_burst", "nova_mult", 1.5)))
+            for e in world().enemies.query_circle(origin, rr):
+                world().enemies.damage(e, amount, e.pos - origin, 220.0, def.color, "armor_burst")
+            world().fx.ring(origin, 10.0, rr, 0.35, Color(1.0, 0.85, 0.5), 5.0)
+            world().fx.star(origin, rr * 0.5, Color(1.0, 0.9, 0.6), 0.3)
+            world().announce("ARMOR BURST", false)
+            Audio.sfx("player_hit", -2.0, 0.6)
+            Game.shake(5.0)
+            t = float(p["interval"]) * cd()
+            return
+        if not has_evo("bulldozer"):
+            player.stun(float(p["break_stun"]))
+        world().fx.ring(origin, 6.0, 70.0, 0.4, Color(1.0, 0.4, 0.3), 4.0)
+        world().announce("ARMOR BROKEN - STUNNED" if not has_evo("bulldozer") else "ARMOR BROKEN", true)
         Audio.sfx("player_hit", -2.0, 0.6)
         Game.shake(5.0)
         t = float(p["interval"]) * cd()
+
+    func on_armor_hit(_amount: float, source_pos: Vector2) -> void:
+        if not has_evo("spiked_hide") or not source_pos.is_finite():
+            return
+        var attacker = world().enemies.nearest(source_pos, 70.0, {})
+        if attacker == null:
+            return
+        var dir: Vector2 = (attacker.pos - player.global_position).normalized()
+        world().enemies.damage(attacker, _roar_dmg(float(evo_param("spiked_hide", "thorns_mult", 1.0))), dir, float(evo_param("spiked_hide", "knockback", 120.0)), def.color, "spiked_hide")
+        world().fx.hit_sparks(attacker.pos, -dir, def.color, 4)
+
+    func _roar_dmg(mult: float) -> float:
+        if player.weapon != null:
+            return player.weapon.dmg(mult)
+        return 10.0 * player.stat("damage") * mult
 
     func hud_line() -> String:
         if active_t > 0.0:

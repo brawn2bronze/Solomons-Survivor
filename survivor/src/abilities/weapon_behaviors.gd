@@ -557,6 +557,18 @@ class MeleeSwipe extends Ability:
     var gs_still := 0.0            # bulwark_stance: still time
     var gs_guard_dir := Vector2.ZERO
     var gs_guard_on := false
+    # Minotaur evolutions (horns)
+    var horn_last_hit = null
+    var horn_flings: Array = []     # fling: {e, from, dir, t, life, hit}
+    var horn_whirl_t := 0.0         # labrys_whirl: active seconds
+    var horn_whirl_tick := 0.0
+    var horn_walls: Array = []      # labyrinth_walls: {pos, t}
+    var horn_wall_cd := 0.0
+    var horn_run := 0.0             # ramming_speed: straight-run seconds
+    var horn_run_dir := Vector2.ZERO
+    var horn_run_cd := 0.0
+    var horn_carried = null         # skewer: enemy pinned to the charge
+    var horn_charge_active := false
 
     func update(delta: float) -> void:
         t -= delta
@@ -572,7 +584,9 @@ class MeleeSwipe extends Ability:
             _cut_tick(delta)
         if _greatsword_update(delta):
             return
-        if flags.get("charge", false):
+        if _horns_update(delta):
+            return
+        if flags.get("charge", false) and not has_evo("ramming_speed"):
             charge_t -= delta
             if charge_t <= 0.0 and player.dash_t <= 0.0:
                 _try_charge()
@@ -599,6 +613,9 @@ class MeleeSwipe extends Ability:
             return
         var fv := _fervor_bonus()
         t = float(p["cooldown"]) * cd() / maxf(0.25, 1.0 + fv)
+        if has_evo("labrys_whirl") and nth("horns_labrys", int(evo_param("labrys_whirl", "every", 6))):
+            _begin_horn_whirl()
+            return
         if has_evo("dawnbreaker") and nth("greatsword_dawn", int(evo_param("dawnbreaker", "every", 5))):
             var dtell := float(evo_param("dawnbreaker", "tell", 0.4))
             var dcenter := player.global_position
@@ -646,6 +663,10 @@ class MeleeSwipe extends Ability:
             knock *= 1.8
             world().fx.ring(origin, r * 0.4, r, 0.22, def.color, 3.0)
         var hit_n: int = _slash_at(origin, dir, r, amount, knock)
+        if has_evo("fling") and hit_n > 0 and horn_last_hit != null:
+            _horn_fling(horn_last_hit, dir)
+        if has_evo("hook_swing") and hit_n > 0:
+            _horn_hook(origin, dir, r)
         if has_evo("retribution") and gs_retribution > 0.05:
             _retribution_nova(origin)
         Audio.sfx(def.audio_event, -5.0)
@@ -683,6 +704,7 @@ class MeleeSwipe extends Ability:
         if p.get("alternate", false):
             d = dir.rotated(flip * 0.35)
         var hits: Array[EnemyManager.E] = world().enemies.query_arc(origin, d, r, arc)
+        horn_last_hit = hits.back() if not hits.is_empty() else null
         var col: Color = def.color
         for e in hits:
             world().enemies.damage(e, amount, e.pos - origin, knock, col)
@@ -979,7 +1001,197 @@ class MeleeSwipe extends Ability:
         if tgt == null:
             return
         var dir: Vector2 = (tgt.pos - player.global_position).normalized()
-        player.start_dash(dir, 230.0, 540.0, {"damage": dmg(float(p["charge_damage"])), "hit_radius": 22.0, "impale": true, "invuln": true, "color": def.color})
+        _start_horn_dash(dir, 230.0, float(p["charge_damage"]), 0.0)
+        Audio.sfx("horn_swipe", -2.0, 0.65)
+        world().fx.ring(player.global_position, 4.0, 40.0, 0.25, Color(1.0, 0.8, 0.5), 3.0)
+
+    # ------------------------------------------------------------------ horns
+    func _horns_update(delta: float) -> bool:
+        if horn_run_cd > 0.0:
+            horn_run_cd -= delta
+        if horn_wall_cd > 0.0:
+            horn_wall_cd -= delta
+        if player.dash_t <= 0.0:
+            horn_charge_active = false
+        _horn_tick_flings(delta)
+        _horn_tick_walls(delta)
+        if horn_carried != null:
+            if not is_instance_valid(horn_carried) or not horn_carried.alive:
+                horn_carried = null
+            elif player.dash_t > 0.0:
+                horn_carried.pos = player.global_position + player.dash_dir * 26.0
+                horn_carried.knock = Vector2.ZERO
+        if has_evo("steered_rush") and horn_charge_active and player.dash_t > 0.0 and player.move_input.length() > 0.1:
+            player.dash_dir = player.move_input.normalized()
+        if horn_whirl_t > 0.0:
+            _horn_whirl_tick(delta)
+            return true
+        if has_evo("labyrinth_walls") and horn_wall_cd <= 0.0:
+            _raise_horn_walls()
+        if has_evo("ramming_speed"):
+            _horn_ramming(delta)
+        return false
+
+    func _horn_fling(e, dir: Vector2) -> void:
+        if e == null or not is_instance_valid(e) or not e.alive or float(e.def.boss_time) > 0.0:
+            return
+        var d := dir
+        if d.length_squared() < 0.01:
+            d = player.last_dir
+        d = d.normalized()
+        horn_flings.append({"e": e, "from": e.pos, "dir": d, "t": 0.0, "life": 0.25, "hit": {}})
+        e.stun = maxf(e.stun, 0.35)
+        world().fx.ring(e.pos, 4.0, 30.0, 0.2, def.color, 2.0)
+
+    func _horn_tick_flings(delta: float) -> void:
+        if horn_flings.is_empty():
+            return
+        var dist := float(evo_param("fling", "distance", 220.0))
+        var mult := float(evo_param("fling", "mult", 1.0))
+        for i in range(horn_flings.size() - 1, -1, -1):
+            var f: Dictionary = horn_flings[i]
+            var e = f["e"]
+            if not is_instance_valid(e) or not e.alive:
+                horn_flings.remove_at(i)
+                continue
+            f["t"] = float(f["t"]) + delta
+            var k := clampf(float(f["t"]) / float(f["life"]), 0.0, 1.0)
+            e.pos = Vector2(f["from"]) + Vector2(f["dir"]) * dist * k
+            e.knock = Vector2.ZERO
+            var hit: Dictionary = f["hit"]
+            for other in world().enemies.query_circle(e.pos, 22.0):
+                if other == e or hit.has(other.uid):
+                    continue
+                hit[other.uid] = true
+                world().enemies.damage(other, dmg(mult), Vector2(f["dir"]), 140.0, def.color, "fling")
+            if float(f["t"]) >= float(f["life"]):
+                horn_flings.remove_at(i)
+
+    func _horn_hook(origin: Vector2, dir: Vector2, r: float) -> void:
+        var arc := deg_to_rad(float(p["arc_deg"]))
+        var pull := float(evo_param("hook_swing", "pull_px", 60.0)) * 8.0
+        for e in world().enemies.query_arc(origin, dir, r, arc):
+            if e.pos.distance_to(origin) < r * 0.55:
+                continue
+            world().enemies.pull(e, origin, r, pull)
+
+    func _begin_horn_whirl() -> void:
+        horn_whirl_t = float(evo_param("labrys_whirl", "duration", 1.2))
+        horn_whirl_tick = 0.0
+        var origin := player.global_position + Vector2(0, -10)
+        world().fx.ring(origin, 6.0, float(p["radius"]) * player.stat("area"), 0.25, def.color, 3.0)
+        Audio.sfx(def.audio_event, -3.0)
+
+    func _horn_whirl_tick(delta: float) -> void:
+        horn_whirl_t -= delta
+        player.add_buff("labrys_whirl", 0.12, {}, {"move_speed": float(evo_param("labrys_whirl", "move_mult", 0.7))})
+        horn_whirl_tick -= delta
+        if horn_whirl_tick <= 0.0:
+            horn_whirl_tick = float(evo_param("labrys_whirl", "tick", 0.2))
+            var origin := player.global_position + Vector2(0, -10)
+            var r := float(p["radius"]) * player.stat("area")
+            var amount := dmg(float(evo_param("labrys_whirl", "mult", 0.5)))
+            for e in world().enemies.query_circle(origin, r):
+                world().enemies.damage(e, amount, e.pos - origin, 90.0, def.color, "labrys_whirl")
+            world().fx.slash_arc(origin, player.last_dir.angle(), r, TAU, def.color, 1.0, 0.18, FxManager.PRIO_NORMAL, AbilityArt.weapon_arc_skin(def))
+            Game.shake(1.2)
+        if horn_whirl_t <= 0.0:
+            horn_whirl_t = 0.0
+
+    func _raise_horn_walls() -> void:
+        horn_wall_cd = float(evo_param("labyrinth_walls", "cooldown", 8.0)) * cd()
+        var origin := player.global_position + Vector2(0, -10)
+        var dir: Vector2 = player.move_input.normalized() if player.move_input.length() > 0.1 else player.last_dir
+        var n := maxi(2, int(evo_param("labyrinth_walls", "pillars", 5)))
+        var dist := float(evo_param("labyrinth_walls", "distance", 70.0))
+        var arc := deg_to_rad(float(evo_param("labyrinth_walls", "arc_deg", 140.0)))
+        var base := dir.angle()
+        var life := float(evo_param("labyrinth_walls", "life", 3.0))
+        for i in n:
+            var a := base + (float(i) / float(n - 1) - 0.5) * arc
+            var pos := origin + Vector2.from_angle(a) * dist
+            horn_walls.append({"pos": pos, "t": life})
+        world().fx.ring(origin, 10.0, dist + 20.0, 0.3, def.color, 3.0)
+        Audio.sfx(def.audio_event, -4.0)
+
+    func _horn_tick_walls(delta: float) -> void:
+        if horn_walls.is_empty():
+            return
+        var amount := dmg(float(evo_param("labyrinth_walls", "mult", 0.5)))
+        for i in range(horn_walls.size() - 1, -1, -1):
+            var w: Dictionary = horn_walls[i]
+            w["t"] = float(w["t"]) - delta
+            var pos: Vector2 = w["pos"]
+            if float(w["t"]) <= 0.0:
+                horn_walls.remove_at(i)
+                continue
+            world().fx.beam_between(pos + Vector2(0, -24), pos + Vector2(0, 16), 7.0, 0.08, Color(0.75, 0.7, 0.6))
+            world().projectiles.intercept(pos, 18.0, "destroy")
+            for e in world().enemies.query_circle(pos, 22.0):
+                world().enemies.damage(e, amount, e.pos - pos, 120.0, def.color, "labyrinth_walls")
+
+    func _horn_ramming(delta: float) -> void:
+        if player.dash_t > 0.0:
+            horn_run = 0.0
+            horn_run_dir = Vector2.ZERO
+            return
+        if horn_run_cd > 0.0 or not player.is_walking():
+            horn_run = 0.0
+            horn_run_dir = Vector2.ZERO
+            return
+        var dir: Vector2 = player.move_input.normalized() if player.move_input.length() > 0.1 else player.last_dir
+        if horn_run_dir.length_squared() < 0.01 or horn_run_dir.dot(dir) < 0.92:
+            horn_run_dir = dir
+            horn_run = 0.0
+        horn_run += delta
+        if horn_run >= float(evo_param("ramming_speed", "run_time", 1.0)):
+            horn_run = 0.0
+            horn_run_dir = Vector2.ZERO
+            _start_horn_dash(dir, float(evo_param("ramming_speed", "distance", 300.0)), float(evo_param("ramming_speed", "mult", 2.0)), float(evo_param("ramming_speed", "cooldown", 4.0)))
+
+    func _start_horn_dash(dir: Vector2, distance: float, mult: float, cooldown: float) -> void:
+        if dir.length_squared() < 0.01:
+            dir = player.last_dir
+        if cooldown > 0.0:
+            horn_run_cd = cooldown * cd()
+        horn_charge_active = true
+        var opts := {"damage": dmg(mult), "hit_radius": 22.0, "impale": true, "invuln": true, "color": def.color}
+        if has_evo("skewer") or has_evo("breaking_charge"):
+            opts["hit_cb"] = func(e) -> void: _horn_charge_hit(e)
+            opts["end_cb"] = func() -> void: _horn_charge_end()
+        player.start_dash(dir.normalized(), distance, 540.0, opts)
+
+    func _horn_charge_hit(e) -> void:
+        if has_evo("skewer") and not e.is_elite and float(e.def.boss_time) <= 0.0 and horn_carried == null:
+            horn_carried = e
+            e.stun = maxf(e.stun, 1.5)
+        if has_evo("breaking_charge"):
+            world().enemies.mark(e, "vulnerable", float(evo_param("breaking_charge", "duration", 5.0)), "breaking_charge", {"taken": float(evo_param("breaking_charge", "taken", 1.25))})
+
+    func _horn_charge_end() -> void:
+        horn_charge_active = false
+        if not has_evo("skewer") or horn_carried == null:
+            horn_carried = null
+            return
+        var carried = horn_carried
+        horn_carried = null
+        if not is_instance_valid(carried) or not carried.alive:
+            return
+        var origin := player.global_position + Vector2(0, -10)
+        var rr := float(evo_param("skewer", "slam_radius", 60.0)) * player.stat("area")
+        var amount := dmg(float(evo_param("skewer", "slam_mult", 2.0)))
+        for e in world().enemies.query_circle(origin, rr):
+            world().enemies.damage(e, amount, e.pos - origin, 220.0, def.color, "skewer")
+        world().fx.ring(origin, 8.0, rr, 0.3, def.color, 4.0)
+        Game.shake(3.0)
+        Audio.sfx(def.audio_event, -3.0)
+
+    func horn_force_charge(distance: float) -> void:
+        var tgt: EnemyManager.E = world().enemies.nearest(player.global_position, 360.0, {})
+        if tgt == null:
+            return
+        var dir: Vector2 = (tgt.pos - player.global_position).normalized()
+        _start_horn_dash(dir, distance, float(p["charge_damage"]), 0.0)
         Audio.sfx("horn_swipe", -2.0, 0.65)
         world().fx.ring(player.global_position, 4.0, 40.0, 0.25, Color(1.0, 0.8, 0.5), 3.0)
 
